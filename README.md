@@ -48,5 +48,5 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 >-h :Help; Shows help page
 
 ##### Examples
-* ./h265izer big_buck_bunny_1080p_h264.mov -v
-* ./h265izer big_buck_bunny_folder -v -d /home -q 25 -g /tmp
+* ./h265izer -v big_buck_bunny_1080p_h264.mov
+* ./h265izer -v -d /home -q 25 -g /tmp big_buck_bunny_folder
