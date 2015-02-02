@@ -1,0 +1,429 @@
+#/bin/sh
+
+# All of these preset do not need to be chanded, the script will work (in almost all cases) with all defaults
+
+declare -A defaults
+defaults+=([destination]="$HOME/h265") # (NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
+defaults+=([quality]=19) # 0-51; default: 19
+defaults+=([preset]="fast") # x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
+defaults+=([nativeLangCode]="eng") # Examples: eng, fre, spa, dut, et cetera; default: eng
+defaults+=([tempName]="encoding-in-process") # Temporary name of the new unfinished file
+defaults+=([outputFormat]="mkv") # Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
+defaults+=([tempDir]="$HOME/h265") # (NO TRAILING SLASH) Directory where new unfinished file is stored; default: $HOME/h265
+defaults+=([previewLength]=30) # Seconds to be encoded in preview mode; default: 30
+defaults+=([timeDiffLimit]=1) # Seconds in length that the output is allowed to differ from the original source; A 3 hour movie usually differs by about .2 seconds; Integers ONLY; default: 1 #Allows output up to 1 second longer or shorter
+defaults+=([extraOptions]="") # Extra options; Experimental, can lead to glitchy encodes; Not Recommended #-x me=umh:subme=4:ref=12:b-adapt=2:rc-lookahead=50
+defaults+=([handbrakecli]="HandBrakeCLI") # handbrakecli command; default: HandBrakeCLI
+defaults+=([verbose]=0) # Verbose Mode
+defaults+=([preview]=0) # Preview Mode
+
+# DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
+################################################################################
+
+# Colors
+green='\033[0;32m'
+red='\033[0;31m'
+yellow='\033[0;33m'
+lightb='\033[1;34m'
+NC='\033[0m' # No Color
+# End Colors
+
+package="h265ize"
+description="Convert videos into x265 videos."
+version="0.1"
+commandDesciptions="
+  -d :(NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
+  -q :0-51; default: 19
+  -m :x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
+  -n :Your native language; Examples: eng, fre, spa, dut; default: eng
+  -t :Temporary name of the new unfinished file
+  -f :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
+  -g :(NO TRAILING SLASH) Directory where new unfinished file is stored; default: $HOME/h265
+  -l :Seconds to be encoded in preview mode; default: 30
+  -v :Verbose mode; Display extra output
+  -p :Preview mode; Only processes the first ${defaults[previewLength]} seconds
+  -x :Extra options; Experimental, can lead to glitchy encodes; Not Recommended
+  -h :Help; Shows this help page
+"
+how="Usage: $0 [-h(help)] ( [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>] [-g <string>] [-l <integer>] [-v] [-p] input <file|directory> )"
+
+usage() {
+	echo $how 1>&2
+	exit 1
+}
+helps() {
+	echo "$package   Version: $version"
+	echo "Description: $description" 1>&2
+	echo $how 1>&2
+	echo "Commands:$commandDesciptions" 1>&2
+	exit 0
+}
+
+# Tests
+number='^[0-9]+$'
+function isNumber() {
+	if ! [[ $1 =~ $re ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
+function isDirectory() {
+  if [[ -d "$1" ]] && [[ -n "$1" ]];then
+    return 0
+  else
+    return 1
+  fi
+}
+
+declare -A options
+while getopts :d:q:m:n:t:f:g:l:vph o; do
+    case "${o}" in
+        d)
+            options+=([destination]=${OPTARG})
+            ;;
+        q)
+            options+=([quality]=${OPTARG})
+            ;;
+        m)
+            options+=([preset]=${OPTARG})
+            ;;
+        n)
+            options+=([nativeLangCode]=${OPTARG})
+            ;;
+        t)
+            options+=([tempName]=${OPTARG})
+            ;;
+        f)
+            options+=([outputFormat]=${OPTARG})
+            ;;
+        g)
+            options+=([tempDir]=${OPTARG})
+            ;;
+        l)
+            options+=([previewLength]=${OPTARG})
+            ;;
+        v)
+			unset options[verbose]
+            options+=([verbose]=1)
+            ;;
+        p)
+			unset options[preview]
+            options+=([preview]=1)
+            ;;
+        x)
+            options+=([extraOptions]=${OPTARG})
+            ;;
+        h)
+            helps
+            ;;
+        \?)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+# # Debug
+# for index in "${!options[@]}"
+# do
+  # echo " key   : $index"
+  # echo "value  : ${options[$index]}"
+# done
+
+# Merge options with defaults
+for index in "${!defaults[@]}";do
+  if [ ! -n "${options[$index]}" ];then
+	options[$index]="${defaults[$index]}"
+  fi
+done
+
+# Make sure output directory exists
+if [[ ! -d "${options[destination]}" ]]; then
+	echo -e -n "${yellow}[h265ize]$NC: Output destination \"${options[destination]}\" does not exist. Would you like to create it? [y/N]: "
+	while true; do
+		read yn
+		case $yn in
+			[Yy]* ) mkdir ${options[destination]}; break;;
+			[Nn]* ) exit 2;;
+			* ) exit 2;;
+		esac
+	done
+fi
+# Make sure temp output directory exists
+if [[ ! -d "${options[tempDir]}" ]]; then
+	echo -e -n "${yellow}[h265ize]$NC: Temporary output destination \"${options[tempDir]}\" does not exist. Would you like to create it? [y/N]: "
+	while true; do
+		read yn
+		case $yn in
+			[Yy]* ) mkdir ${options[tempDir]}; break;;
+			[Nn]* ) exit 2;;
+			* ) exit 2;;
+		esac
+	done
+fi
+
+
+DIRECTORY=${1%/}
+PARENTDIRECTORY="$(dirname "$DIRECTORY")"
+FILES=$(find "$DIRECTORY" -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p')
+# ISOs are currently no supported
+#FILES=`find "$DIRECTORY" -type f -exec file -N -i -- {} + | sed -n -r 's!: (video\/|application\/octet-stream)[^:]*$!!p'`
+#FFPROBE="ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000"
+if [ ! -n "$FILES" ]; then
+	echo -e "${red}[h265ize]$NC: No video files found."
+	exit
+fi
+
+verbose(){
+	if [ ${options[verbose]} -eq 1 ]; then echo -e "${1}[h265ize]${NC}: ${lightb}[Verbose]${NC} $2"; fi
+}
+
+# http://stackoverflow.com/questions/9256644/identifying-received-signal-name-in-bash-shell-script
+trap_with_arg() {
+    func="$1" ; shift
+    for sig ; do
+        trap "$func $sig" "$sig"
+    done
+}
+cleanup(){
+	echo -e "${yellow}[h265ize]$NC: h265ize did not end cleanly. Deleting temp file."
+        /bin/rm "${tempVars[tempOutput]}";
+	exit 1;
+}
+trap_with_arg cleanup INT TERM
+
+while read -r FILE; do
+	
+	# Make sure temp variables are clear
+	unset tempVars
+	declare -A tempVars
+
+	tempVars+=([filenameWithExtention]=$(basename "$FILE"))
+	tempVars+=([fileExtension]="${FILE##*.}")
+	tempVars+=([filename]=$(basename "${FILE%.*}"))
+	tempVars+=([fileDir]="${FILE%/*}")
+	tempVars+=([relativeDir]="${tempVars[fileDir]#$PARENTDIRECTORY}")
+	#echo "FILEDIR: ${tempVars[fileDir]} PARENTDIR: $PARENTDIRECTORY"
+	tempVars+=([fileWithDir]="${FILE%.*}")
+	tempVars+=([fileEscaped]=$(printf '%q' "$FILE"))
+	tempVars+=([filenameEscaped]=$(printf '%q' "${tempVars[filename]}"))
+
+	if [ "${options[preview]}" -eq 1 ]; then
+		tempVars+=([previewSuffix]="-preview")
+	fi
+
+	#echo "Destination: ${options[destination]}"
+	tempVars+=([outputDest]=$(printf '%q' "${options[destination]%/}"))
+	tempVars+=([relativeDest]="${tempVars[relativeDir]#/}")
+	#echo -e "${lightb} RelativeDest: ${tempVars[relativeDest]}"
+	tempVars+=([outputFile]="${tempVars[filename]}${tempVars[previewSuffix]}.${options[outputFormat]}")
+	if [ -n "${tempVars[relativeDest]}" ]; then
+		tempVars+=([output]="${tempVars[outputDest]}/${tempVars[relativeDest]}/${tempVars[outputFile]}")
+	else
+		tempVars+=([output]="${tempVars[outputDest]}/${tempVars[outputFile]}")
+	fi
+	#echo -e "${red}$output"
+	tempVars+=([tempDirEscaped]=$(printf '%q' "${options[tempDir]%/}"))
+	tempVars+=([tempOutput]="${tempVars[tempDirEscaped]}/${options[tempName]}.$RANDOM.${options[outputFormat]}")
+	#echo "$output `dirname $output`"
+	
+	tempVars+=([onSubtitleNumber]=1) # Deafult is 1 because every video has the scan subtitle
+	tempVars+=([onAudioNumber]=0)
+	
+	echo -e "${green}[h265ize]$NC: Processing ${tempVars[filenameWithExtention]}..."
+	echo "--------------------------------------------------------------------------------"
+	
+	# Check if output file already exists
+	if [ -e "${tempVars[output]}" ] && [ ! "${options[preview]}" -eq 1 ]; then
+		echo -e "${yellow}[h265ize]$NC: ${tempVars[output]} already exists. Skipping..."
+		continue
+	fi
+
+	# Get number of streamsi
+	tempVars+=([numStreams]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o '\[STREAM\]' | wc -l))
+	tempVars+=([numStreamsFromIndex]=$(expr ${tempVars[numStreams]} - 1))
+
+	# Get number of audio tracks
+	tempVars+=([numAudioTracks]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'codec_type=audio' | wc -l))
+	tempVars+=([audioTracks]=$(seq -s, $counter 1 ${tempVars[numAudioTracks]}))
+	tempVars+=([AudioCodecs]="")
+
+	# Get duration and size
+	eval $(ffprobe -loglevel quiet -show_format "$FILE" | grep -E 'duration|size')
+	tempVars+=([duration]="$duration")
+	unset duration
+	tempVars+=([size]=$(echo "$size / 1000000" | bc)) # Size in MB
+	unset size
+	tempVars+=([formatedDuration]=$(echo "scale=2; ${tempVars[duration]} / 60" | bc)) # Time in minutes
+	#divisor=`echo "$duration / 60 * .7" | bc`
+	#echo $divisor
+	#factor=`echo "$size / $divisor" | bc`
+	#echo $factor
+	#quality=`echo "scale=2; $factor" | bc`
+	#echo $quality
+
+	verbose $green "Duration: ${tempVars[formatedDuration]} Minutes (${tempVars[duration]} seconds)"
+	verbose $green "Size: ${tempVars[size]} MB"
+
+	addAudioCodecToVar(){
+        if [ -z "${tempVars[audioCodecs]}" ]; then
+			tempVars+=([audioCodecs]="$1")
+		else
+			tempVars[audioCodecs]="${tempVars[audioCodecs]},$1"
+		fi
+	}
+
+	addAudioNameToVar() {
+		if [ -z "${tempVars[audioNames]}" ]; then
+            tempVars+=([audioNames]="$1")
+        else
+			temp=${tempVars[audioNames]}
+			unset tempVars[audioNames]
+            tempVars+=([audioNames]="$temp,$1")
+			unset temp
+        fi
+	}
+
+	addAudioCodec(){ # $1=format $2=bit_rate (flac only)
+		#if [ $1 = "N/A" ]; then
+                #        $2=""
+                #fi
+		if [ $1 = "flac" ]; then
+            addAudioCodecToVar "flac$2"
+		elif [ $1 = "dts" ]; then
+			addAudioCodecToVar "copy:dts"
+		elif [ $1 = "dtshd" ]; then
+            addAudioCodecToVar "copy:dtshd"
+		elif [ $1 = "ac3" ]; then
+            addAudioCodecToVar "ac3"
+		elif [ $1 = "mp3" ]; then
+            addAudioCodecToVar "mp3"
+		else
+			addAudioCodecToVar "copy"
+		fi
+	}
+
+	for i in $(seq 0 ${tempVars[numStreamsFromIndex]}); do
+
+		eval $(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep -E "codec_name|codec_type|bits_per_raw_sample|width|height")
+		#echo `[[$codec_type -eq "video"]]`
+		language=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:language" | sed -n -e 's/^.*language=//p')
+
+		if [ "$codec_type" = "video" ]; then
+			tempVars+=([sourceWidth]="$width")
+			tempVars+=([sourceHeight]="$height")
+			if [ $codec_name = "h265" ]; then
+				echo -e "${red}[h265ize]$NC: Video is already encoded in h265. Skipping..."
+				continue
+			fi
+
+		elif [ "$codec_type" = "audio" ]; then
+			title=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:title" | sed -n -e 's/^.*title=//p')
+			#echo -e "${green}$TITLE"
+			tempVars[onAudioNumber]=$((${tempVars[onAudioNumber]} + 1))
+				if [ ${tempVars[onAudioNumber]} = 1 ]; then
+					tempVars+=([defaultAudioLang]="$language")
+				fi
+			addAudioNameToVar "$title"
+			addAudioCodec $codec_name $bits_per_raw_sample $language
+
+		elif [ "$codec_type" = "subtitle" ]; then
+			tempVars[onSubtitleNumber]=$((${tempVars[onSubtitleNumber]} + 1))
+			#echo "Language: $language     Default Audio: ${tempVars[defaultAudioLang]}    NativeLangCode: ${options[nativeLangCode]}"
+			if [ "$language" = "${options[nativeLangCode]}" ] && [[ ! "${tempVars[defaultAudioLang]}" =~ ${options[nativeLangCode]} ]]; then
+					if [ -n "${tempVars[defaultSubtitle]}" ]; then
+						verbose $yellow "Multiple potential default subtitles with language $language found. Using first potential subtitle."
+					else
+						verbose $green "Default audio language does not match native language and native language subtitle provided. Default subtitle set to native language."
+						tempVars+=([defaultSubtitle]="--subtitle-default=${tempVars[onSubtitleNumber]}")
+					fi
+			fi
+		fi
+		
+		unset language
+		unset title
+		unset codec_name
+		unset codec_type
+		unset bits_per_raw_sample
+		unset width
+		unset height
+		
+	done
+
+	verbose $green "Resolution: ${tempVars[sourceWidth]}x${tempVars[sourceHeight]}"
+	verbose $green "Audio Codecs: ${tempVars[audioCodecs]}"
+	verbose $green "Audio Tracks: ${tempVars[audioNames]}"
+
+	tempVars[audioNames]="-A\"${tempVars[audioNames]}\""
+
+	# Get number of subtitle tracks
+	tempVars+=([numSubtitleTracks]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'codec_type=subtitle' | wc -l))
+	if [ "${tempVars[numSubtitleTracks]}" -gt 0 ]; then
+		tempVars+=([subtitleTracks]="scan,`seq -s, $counter 1 ${tempVars[numSubtitleTracks]}`")
+	else
+		tempVars+=([subtitleTracks]="scan")
+	fi
+
+	verbose $green "Subtitles: ${tempVars[subtitleTracks]}"
+	
+	# Find out if bit depth 10 or 8 should be used
+	tempVars+=([bitDepth10]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'profile=High 10'))
+
+	if [ -n "${tempVars[bitDepth10]}" ]; then
+		tempVars+=([profile]="main10")
+	else
+		tempVars+=([profile]="main")
+	fi
+
+	if [ ${options[preview]} -eq 1 ]; then tempVars+=([startStop]="--start-at duration:0 --stop-at duration:${options[previewLength]}"); fi
+
+	verbose $green "Encoding Profile: ${tempVars[profile]}"
+
+	tempVars+=([query]="${options[handbrakecli]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 -q ${options[quality]} --cfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --subtitle-force scan --native-language=${options[nativeLangCode]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${options[extraOptions]} --verbose=0 < /dev/null")
+	
+	verbose $green "${red}[Query]$NC ${tempVars[query]}"
+	
+	echo -e "${green}[h265ize]${NC}: Handbraking... -----------------------------------------------------"
+	eval ${tempVars[query]}
+	wait $!
+
+	tempVars+=([handbrakeStatus]=$?)
+	
+	tempVars+=([newDuration]=$(ffprobe -loglevel quiet -show_format "${tempVars[tempOutput]}" | grep 'duration' | sed 's/.*duration=\(.*\).*/\1/'))
+	if [ "${tempVars[newDuration]}" = "N/A" ] || [ ! -n "${tempVars[newDuration]}" ]; then
+		tempVars[newDuration]=0
+	fi
+
+	tempVars+=([newDurationMax]=$(echo "${tempVars[duration]} + ${options[timeDiffLimit]}" | bc))
+	tempVars+=([newDurationMin]=$(echo "${tempVars[duration]} - ${options[timeDiffLimit]}" | bc))
+	tempVars+=([passMax]=$(echo "${tempVars[newDuration]} < ${tempVars[newDurationMax]}" | bc))
+	tempVars+=([passMin]=$(echo "${tempVars[newDuration]} > ${tempVars[newDurationMin]}" | bc))
+	verbose $green "Original Duration: ${lightb}${tempVars[duration]}$NC New Duration: ${lightb}${tempVars[newDuration]}$NC"
+
+	if [ ! "${tempVars[handbrakeStatus]}" -eq 0 ]; then
+		echo -e "${red}[h265ize]$NC: Ut oh. Handbrake exited with an error code."
+		cleanup
+		
+	elif [ -n "${tempVars[duration]}" ] && [ 1 -eq "${tempVars[passMax]}" ] && [ 1 -eq "${tempVars[passMin]}" ] && [ ! "${options[preview]}" -eq 1 ]; then
+		/bin/mkdir -p "${tempVars[output]%/*}"
+		/bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+		echo -e "${green}[h265ize]$NC: ${tempVars[filename]} encoded successfully."
+		
+	elif [ "${options[preview]}" -eq 1 ]; then
+		/bin/mkdir -p "${tempVars[output]%/*}"
+		/bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+		echo -e "${green}[h265ize]$NC: Preview output in: ${tempVars[output]}"
+		
+	else
+        echo -e "${red}[h265ize]$NC: Ut oh. Duration of ${tempVars[filename]} is not within acceptable limits of the original file."
+		echo -e "${red}[h265ize]$NC: Bad file stored at ${tempVars[tempOutput]}."
+    fi
+
+	if [ -n "$DELETE" ]; then
+		/bin/rm "$FILE"
+	fi
+
+done <<< "$FILES"
+
+echo -e "${green}[h265ize]$NC: Completed!"
