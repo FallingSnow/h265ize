@@ -1,5 +1,5 @@
 # h265ize
-A bash script utilizing handbrake to encode videos with the hevc codec.
+h265ize is a fire and forget weapon. A bash script utilizing handbrake to encode large quantities of videos with the hevc codec.
 For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265izer/ "Ayrton Sparling").
 
 ## Features

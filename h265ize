@@ -17,6 +17,7 @@ defaults+=([extraOptions]="") # Extra options; Experimental, can lead to glitchy
 defaults+=([handbrakecli]="HandBrakeCLI") # handbrakecli command; default: HandBrakeCLI
 defaults+=([verbose]=0) # Verbose Mode; default: 0
 defaults+=([preview]=0) # Preview Mode; default: 0
+defaults+=([override]=0) # Override Mode; default: 0
 
 # DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
 ################################################################################
@@ -44,6 +45,7 @@ commandDesciptions="
   -l :Seconds to be encoded in preview mode; default: 30
   -v :Verbose mode; Display extra output
   -p :Preview mode; Only processes the first ${defaults[previewLength]} seconds
+  -o :Override mode; Allows conversion of videos that are already encoded by the hevc codec
   -x :Extra options; Experimental, can lead to glitchy encodes; Not Recommended
   -h :Help; Shows this help page
 "
@@ -79,7 +81,7 @@ function isDirectory() {
 }
 
 declare -A options
-while getopts :d:q:m:n:t:f:g:l:x:vpha o; do
+while getopts :d:q:m:n:t:f:g:l:x:vphao o; do
     case "${o}" in
         d)
             options+=([destination]=${OPTARG})
@@ -94,6 +96,7 @@ while getopts :d:q:m:n:t:f:g:l:x:vpha o; do
             options+=([nativeLangCode]=${OPTARG})
             ;;
         a)
+			unset options[autoTimestampResolution]
 			options+=([autoTimestampResolution]=1)
             ;;
         t)
@@ -115,6 +118,10 @@ while getopts :d:q:m:n:t:f:g:l:x:vpha o; do
         p)
 			unset options[preview]
             options+=([preview]=1)
+            ;;
+        o)
+			unset options[override]
+            options+=([override]=1)
             ;;
         x)
             options+=([extraOptions]=${OPTARG})
@@ -323,7 +330,7 @@ while read -r FILE; do
 			tempVars+=([sourceHeight]="$height")
 			# Floor frame rate to get keyInt (Bluray compliant and saves timings and faster seek times)
 			tempVars+=([keyInt]=$(echo "scale=0; $avg_frame_rate" | bc))
-			if [ $codec_name = "h265" ]; then
+			if [ $codec_name = "h265" ] && [ ${options[override]} -eq 0 ]; then
 				echo -e "${red}[h265ize]$NC: Video is already encoded in h265. Skipping..."
 				continue
 			fi
@@ -401,9 +408,9 @@ while read -r FILE; do
 		tempVars+=([profile]="main")
 	fi
 	
-	if [ ${options[preview]} -eq 1 ]; then
+	if [ ${options[autoTimestampResolution]} -eq 0 ]; then
 		tempVars+=([extraOptions]="-x keyint=${tempVars[keyInt]}:${options[extraOptions]}")
-	else
+	elif [ -n "${options[extraOptions]}" ]; then
 		tempVars+=([extraOptions]="-x ${options[extraOptions]}")
 	fi
 
