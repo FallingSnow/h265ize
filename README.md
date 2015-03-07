@@ -21,7 +21,7 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 - Maintains file structure in output folder (So in theory you could just take your 3tb movie folder and throw it into the script and the output folder should look that same but with x265 videos)
 
 ## Usage
-./h265izer [-h(help)] ( [-d &#x3C;string&#x3E;] [-q &#x3C;0|51&#x3E;] [-m &#x3C;string&#x3E;] [-n &#x3C;string&#x3E;{3}] [-t &#x3C;string&#x3E;] [-f &#x3C;string&#x3E;] [-g &#x3C;string&#x3E;] [-l &#x3C;integer&#x3E;] [-v] [-p] input &#x3C;file|directory&#x3E;
+./h265izer [-h(help)] ( [-d &#x3C;string&#x3E;] [-q &#x3C;0|51&#x3E;] [-m &#x3C;string&#x3E;] [-n &#x3C;string&#x3E;{3}] [-a] [-t &#x3C;string&#x3E;] [-f &#x3C;string&#x3E;] [-g &#x3C;string&#x3E;] [-l &#x3C;integer&#x3E;] [-v] [-p] input &#x3C;file|directory&#x3E;
 ### Options
 >-d :(NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
 
