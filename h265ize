@@ -7,15 +7,16 @@ defaults+=([destination]="$HOME/h265") # (NO TRAILING SLASH) Folder to output fi
 defaults+=([quality]=19) # 0-51; default: 19
 defaults+=([preset]="fast") # x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
 defaults+=([nativeLangCode]="eng") # Examples: eng, fre, spa, dut, et cetera; default: eng
-defaults+=([tempName]="encoding-in-process") # Temporary name of the new unfinished file
+defaults+=([autoTimestampResolution]=0) # Auto timestamp resolution (may cause video seek problems but decreases size); default: 0
+defaults+=([tempName]="encoding-in-process") # Temporary name of the new unfinished file; default: encoding-in-process
 defaults+=([outputFormat]="mkv") # Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
 defaults+=([tempDir]="$HOME/h265") # (NO TRAILING SLASH) Directory where new unfinished file is stored; default: $HOME/h265
 defaults+=([previewLength]=30) # Seconds to be encoded in preview mode; default: 30
-defaults+=([timeDiffLimit]=1) # Seconds in length that the output is allowed to differ from the original source; A 3 hour movie usually differs by about .2 seconds; Integers ONLY; default: 1 #Allows output up to 1 second longer or shorter
-defaults+=([extraOptions]="") # Extra options; Experimental, can lead to glitchy encodes; Not Recommended #-x me=umh:subme=4:ref=12:b-adapt=2:rc-lookahead=50
+defaults+=([timeDiffLimit]=1) # Seconds in length that the output is allowed to differ from the original source; A 3 hour movie usually differs by about .2 seconds; Integers ONLY; default: 1 (Allows output up to 1 second longer or shorter)
+defaults+=([extraOptions]="") # Extra options; Experimental, can lead to glitchy encodes; Not Recommended #me=umh:subme=4:ref=12:b-adapt=2:rc-lookahead=50; default: [empty]
 defaults+=([handbrakecli]="HandBrakeCLI") # handbrakecli command; default: HandBrakeCLI
-defaults+=([verbose]=0) # Verbose Mode
-defaults+=([preview]=0) # Preview Mode
+defaults+=([verbose]=0) # Verbose Mode; default: 0
+defaults+=([preview]=0) # Preview Mode; default: 0
 
 # DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
 ################################################################################
@@ -30,15 +31,16 @@ NC='\033[0m' # No Color
 
 package="h265ize"
 description="Convert videos into x265 videos."
-version="0.1"
+version="0.1.1"
 commandDesciptions="
   -d :(NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
   -q :0-51; default: 19
   -m :x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
   -n :Your native language; Examples: eng, fre, spa, dut; default: eng
+  -a :Auto timestamp resolution (may cause video seek problems but decreases size)
   -t :Temporary name of the new unfinished file
   -f :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
-  -g :(NO TRAILING SLASH) Directory where new unfinished file is stored; default: $HOME/h265
+  -g :(NO TRAILING SLASH) Directory where new unfinished file is stored
   -l :Seconds to be encoded in preview mode; default: 30
   -v :Verbose mode; Display extra output
   -p :Preview mode; Only processes the first ${defaults[previewLength]} seconds
@@ -77,7 +79,7 @@ function isDirectory() {
 }
 
 declare -A options
-while getopts :d:q:m:n:t:f:g:l:vph o; do
+while getopts :d:q:m:n:t:f:g:l:x:vpha o; do
     case "${o}" in
         d)
             options+=([destination]=${OPTARG})
@@ -90,6 +92,9 @@ while getopts :d:q:m:n:t:f:g:l:vph o; do
             ;;
         n)
             options+=([nativeLangCode]=${OPTARG})
+            ;;
+        a)
+			options+=([autoTimestampResolution]=1)
             ;;
         t)
             options+=([tempName]=${OPTARG})
@@ -303,23 +308,27 @@ while read -r FILE; do
 			addAudioCodecToVar "copy"
 		fi
 	}
+	
+	declare -a subtitleNames
 
 	for i in $(seq 0 ${tempVars[numStreamsFromIndex]}); do
 
-		eval $(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep -E "codec_name|codec_type|bits_per_raw_sample|width|height")
+		eval $(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep -E "codec_name|codec_type|bits_per_raw_sample|width|height|avg_frame_rate")
 		#echo `[[$codec_type -eq "video"]]`
 		language=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:language" | sed -n -e 's/^.*language=//p')
-
+		title=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:title" | sed -n -e 's/^.*title=//p')
+		
 		if [ "$codec_type" = "video" ]; then
 			tempVars+=([sourceWidth]="$width")
 			tempVars+=([sourceHeight]="$height")
+			# Floor frame rate to get keyInt (Bluray compliant and saves timings and faster seek times)
+			tempVars+=([keyInt]=$(echo "scale=0; $avg_frame_rate" | bc))
 			if [ $codec_name = "h265" ]; then
 				echo -e "${red}[h265ize]$NC: Video is already encoded in h265. Skipping..."
 				continue
 			fi
 
 		elif [ "$codec_type" = "audio" ]; then
-			title=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:title" | sed -n -e 's/^.*title=//p')
 			#echo -e "${green}$TITLE"
 			tempVars[onAudioNumber]=$((${tempVars[onAudioNumber]} + 1))
 				if [ ${tempVars[onAudioNumber]} = 1 ]; then
@@ -329,6 +338,7 @@ while read -r FILE; do
 			addAudioCodec $codec_name $bits_per_raw_sample $language
 
 		elif [ "$codec_type" = "subtitle" ]; then
+			subtitleNames+=("$title")
 			tempVars[onSubtitleNumber]=$((${tempVars[onSubtitleNumber]} + 1))
 			#echo "Language: $language     Default Audio: ${tempVars[defaultAudioLang]}    NativeLangCode: ${options[nativeLangCode]}"
 			if [ "$language" = "${options[nativeLangCode]}" ] && [[ ! "${tempVars[defaultAudioLang]}" =~ ${options[nativeLangCode]} ]]; then
@@ -348,14 +358,29 @@ while read -r FILE; do
 		unset bits_per_raw_sample
 		unset width
 		unset height
+		unset avg_frame_rate
 		
 	done
 
 	verbose $green "Resolution: ${tempVars[sourceWidth]}x${tempVars[sourceHeight]}"
 	verbose $green "Audio Codecs: ${tempVars[audioCodecs]}"
 	verbose $green "Audio Tracks: ${tempVars[audioNames]}"
+	subtitleOutput=$(printf ",%s" "${subtitleNames[@]}")
+	verbose $green "Subtitle Tracks: ${subtitleOutput:1}"
+	unset subtitleOutput
+	
+	for i in "${!subtitleNames[@]}"; do
+		if [ -n "${subtitleNames[$i]}" ]; then
+			tempVars[ffmpegSubtitlesMap]="${tempVars[ffmpegSubtitlesMap]} -metadata:s:s:$i title=\"${subtitleNames[$i]}\""
+		fi
+	done
+	unset subtitleNames
 
-	tempVars[audioNames]="-A\"${tempVars[audioNames]}\""
+	if [ ! -z "${tempVars[audioNames]}" ]; then
+		tempVars[audioNames]="-A\"${tempVars[audioNames]}\""
+	else
+		tempVars[audioNames]=""
+	fi
 
 	# Get number of subtitle tracks
 	tempVars+=([numSubtitleTracks]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'codec_type=subtitle' | wc -l))
@@ -375,12 +400,19 @@ while read -r FILE; do
 	else
 		tempVars+=([profile]="main")
 	fi
+	
+	if [ ${options[preview]} -eq 1 ]; then
+		tempVars+=([extraOptions]="-x keyint=${tempVars[keyInt]}:${options[extraOptions]}")
+	else
+		tempVars+=([extraOptions]="-x ${options[extraOptions]}")
+	fi
 
 	if [ ${options[preview]} -eq 1 ]; then tempVars+=([startStop]="--start-at duration:0 --stop-at duration:${options[previewLength]}"); fi
 
 	verbose $green "Encoding Profile: ${tempVars[profile]}"
 
-	tempVars+=([query]="${options[handbrakecli]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --subtitle-force scan --native-language=${options[nativeLangCode]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${options[extraOptions]} --verbose=0 < /dev/null")
+	tempVars+=([query]="${options[handbrakecli]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --subtitle-force scan --native-language=${options[nativeLangCode]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
+	tempVars+=([ffmpegQuery]="/bin/ffmpeg -loglevel panic -hide_banner -i \"${tempVars[tempOutput]}\" -y -map 0 -c copy ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null")
 	
 	verbose $green "${red}[Query]$NC ${tempVars[query]}"
 	
@@ -407,12 +439,29 @@ while read -r FILE; do
 		
 	elif [ -n "${tempVars[duration]}" ] && [ 1 -eq "${tempVars[passMax]}" ] && [ 1 -eq "${tempVars[passMin]}" ] && [ ! "${options[preview]}" -eq 1 ]; then
 		/bin/mkdir -p "${tempVars[output]%/*}"
-		/bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+		/bin/mkdir -p "${tempVars[output]%/*}"
+		if [ -n "${tempVars[ffmpegSubtitlesMap]}" ]; then
+			verbose $green "${red}[Query]$NC ${tempVars[ffmpegQuery]}"
+			echo -e "${green}[h265ize]$NC: Setting subtitle names..."
+			eval ${tempVars[ffmpegQuery]}
+			wait $!
+			/bin/rm "${tempVars[tempOutput]}"
+		else
+			/bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+		fi
 		echo -e "${green}[h265ize]$NC: ${tempVars[filename]} encoded successfully."
 		
 	elif [ "${options[preview]}" -eq 1 ]; then
 		/bin/mkdir -p "${tempVars[output]%/*}"
-		/bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+		if [ -n "${tempVars[ffmpegSubtitlesMap]}" ]; then
+			verbose $green "${red}[Query]$NC ${tempVars[ffmpegQuery]}"
+			echo -e "${green}[h265ize]$NC: Setting subtitle names..."
+			eval ${tempVars[ffmpegQuery]}
+			wait $!
+			/bin/rm "${tempVars[tempOutput]}"
+		else
+			/bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+		fi
 		echo -e "${green}[h265ize]$NC: Preview output in: ${tempVars[output]}"
 		
 	else
@@ -423,6 +472,10 @@ while read -r FILE; do
 	if [ -n "$DELETE" ]; then
 		/bin/rm "$FILE"
 	fi
+	
+	# Clear stdin because ffmpeg leaves input that will corrupt next command
+	#http://superuser.com/questions/276531/clear-stdin-before-reading
+	#read -t 1 -n 10000 discard 
 
 done <<< "$FILES"
 

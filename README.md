@@ -31,6 +31,8 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 
 >-n :Your native language; Examples: eng, fre, spa, dut; default: eng
 
+>-a :Auto timestamp resolution (may cause video seek problems but decreases size)
+
 >-t :Temporary name of the new unfinished file
 
 >-f :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
