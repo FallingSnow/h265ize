@@ -7,7 +7,7 @@ defaults+=([destination]="$HOME/h265") # (NO TRAILING SLASH) Folder to output fi
 defaults+=([quality]=19) # 0-51; default: 19
 defaults+=([preset]="fast") # x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
 defaults+=([nativeLangCode]="eng") # Examples: eng, fre, spa, dut, et cetera; default: eng
-defaults+=([autoTimestampResolution]=0) # Auto timestamp resolution (may cause video seek problems but decreases size); default: 0
+defaults+=([accurateTimestamps]=0) # Accurate Timestamps (substantially increases file size but sometimes fixes timestamps); default: 0
 defaults+=([tempName]="encoding-in-process") # Temporary name of the new unfinished file; default: encoding-in-process
 defaults+=([outputFormat]="mkv") # Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
 defaults+=([tempDir]="$HOME/h265") # (NO TRAILING SLASH) Directory where new unfinished file is stored; default: $HOME/h265
@@ -21,6 +21,7 @@ defaults+=([override]=0) # Override Mode; default: 0
 
 # DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
 ################################################################################
+################################################################################
 
 # Colors
 green='\033[0;32m'
@@ -32,13 +33,13 @@ NC='\033[0m' # No Color
 
 package="h265ize"
 description="Convert videos into x265 videos."
-version="0.1.1"
+version="0.1.2"
 commandDesciptions="
   -d :(NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
   -q :0-51; default: 19
   -m :x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
   -n :Your native language; Examples: eng, fre, spa, dut; default: eng
-  -a :Auto timestamp resolution (may cause video seek problems but decreases size)
+  -a :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
   -t :Temporary name of the new unfinished file
   -f :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
   -g :(NO TRAILING SLASH) Directory where new unfinished file is stored
@@ -96,8 +97,8 @@ while getopts :d:q:m:n:t:f:g:l:x:vphao o; do
             options+=([nativeLangCode]=${OPTARG})
             ;;
         a)
-			unset options[autoTimestampResolution]
-			options+=([autoTimestampResolution]=1)
+			unset options[accurateTimestamps]
+			options+=([accurateTimestamps]=1)
             ;;
         t)
             options+=([tempName]=${OPTARG})
@@ -408,7 +409,7 @@ while read -r FILE; do
 		tempVars+=([profile]="main")
 	fi
 	
-	if [ ${options[autoTimestampResolution]} -eq 0 ]; then
+	if [ ${options[accurateTimestamps]} -eq 1 ]; then
 		tempVars+=([extraOptions]="-x keyint=${tempVars[keyInt]}:${options[extraOptions]}")
 	elif [ -n "${options[extraOptions]}" ]; then
 		tempVars+=([extraOptions]="-x ${options[extraOptions]}")

@@ -10,12 +10,12 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 - Preserves audio codecs (if not possible; falls back to ac3 audio, this hasn't happened to me yet, I think you would have to use a really strange audio codec)
 - Preserves audio track titles
 - Preserves flac audio sample rate and bit depth (currently supports 44.1khz/16bit and 96khz/24bit, 24bit is popular in high quality anime)
-- Detects and perserves all subtitles
+- Detects and preserves all subtitles
 - Detects audio language, if audio language is not your native language and native language subtitles are provided, makes those subtitle default
 - Automatically searches for foreign segments subtitles
 - Detects bit depth and uses appropriate encoder profile (10-bit is common in high quality anime, supports 8-bit and 10-bit)
 - Verbose and preview mode
-- File override detection (doesn't accidently write over a file that already exists, other than in preview mode)
+- File override detection (doesn't accidentally write over a file that already exists, other than in preview mode)
 - Detects if file is already encoded in x265 and skips it
 - Faulty encoding detection based on before and after video durations
 - Maintains file structure in output folder (So in theory you could just take your 3tb movie folder and throw it into the script and the output folder should look that same but with x265 videos)
@@ -31,7 +31,7 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 
 >-n :Your native language; Examples: eng, fre, spa, dut; default: eng
 
->-a :Auto timestamp resolution (may cause video seek problems but decreases size)
+>-a :Accurate timestamps (fixes seek times jumping all over the place but substantially increases size)
 
 >-t :Temporary name of the new unfinished file
 
