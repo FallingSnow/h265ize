@@ -1,4 +1,4 @@
-#/bin/sh
+#!/bin/sh
 
 # All of these preset do not need to be chanded, the script will work (in almost all cases) with all defaults
 
