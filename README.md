@@ -23,6 +23,7 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 
 ## Creating 10bit encodes
 In order to encode 10bit encodes you must build handbrake yourself with a 10bit x265 build. In order to do this, follow these steps
+
 1. Copy the handbrake respository
 ```
 svn checkout svn://svn.handbrake.fr/HandBrake/trunk hb-trunk
