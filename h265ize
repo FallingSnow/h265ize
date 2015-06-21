@@ -61,7 +61,7 @@ commandDesciptions="
       > animeHigh: Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these are high latency encodes
   --help :Help; Shows this help page
 "
-how="Usage: $0 [-h(help)] ( [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] <file|directory> )"
+how="Usage: $0 [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] <file|directory> )"
 
 usage() {
 	echo $how 1>&2
