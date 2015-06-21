@@ -103,12 +103,16 @@ mv build/HandBrakeCLI /bin/HandBrakeCLI10bit
   
 >  --debug :Debug mode; Print extra debugging information
   
->  --aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
-> - finalCut: Uses the slow preset and allows QP to shift between 19 and 23
-> - animeHigh: Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these are high latency encodes
-      
+>  --aspreset :My personal presets; Possible values are listed [below](#aspresets); I'll be adding more as time goes on
+
 >  --help :Help; Shows help page
 
-##### Examples
+#### Aspresets <a name="aspresets"></a>
+| Preset | Description |
+|:---:|:---|
+| finalCut | Uses the slow preset and allows QP to shift between 19 and 23 |
+| animeHigh | Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these are high latency encodes |
+
+#### Examples
 * ./h265izer -v big_buck_bunny_1080p_h264.mov
 * ./h265izer -v -d /home -q 25 -g /tmp big_buck_bunny_folder
