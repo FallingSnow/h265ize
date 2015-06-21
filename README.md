@@ -27,12 +27,10 @@ In order to encode 10bit encodes you must build handbrake yourself with a 10bit 
 ```
 svn checkout svn://svn.handbrake.fr/HandBrake/trunk hb-trunk
 ```
-
 2. Change directories to the repository you just downloaded
 ```
 cd hb-trunk
 ```
-    
 3. Edit the module.defs file for x265 (in this case using vim)
 ```
 vim contrib/x265/module.defs
