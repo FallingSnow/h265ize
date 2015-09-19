@@ -41,54 +41,6 @@ yaourt vobsub2srt-git; \
 wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod +x h265ize
 ```
 
-## Creating 10bit encodes
-In order to encode 10bit encodes you must build handbrake yourself with a 10bit x265 build. In order to do this, follow these steps
-
-1. Copy the handbrake respository
-```
-svn checkout svn://svn.handbrake.fr/HandBrake/trunk hb-trunk
-```
-2. Change directories to the repository you just downloaded
-```
-cd hb-trunk
-```
-3. Edit the module.defs file for x265 (in this case using vim)
-```
-vim contrib/x265/module.defs
-```
-Change `-DHIGH_BIT_DEPTH=OFF` to `-DHIGH_BIT_DEPTH=ON` and `-DWIN32=ON -DWINXP_SUPPORT=ON` to `-DWIN32=OFF -DWINXP_SUPPORT=OFF`
-#####before
-```
-...
-X265.CONFIGURE.shared      = -DENABLE_SHARED=OFF
-X265.CONFIGURE.extra       = -DENABLE_CLI=OFF -DHIGH_BIT_DEPTH=OFF
-...
-    ifeq (mingw,$(BUILD.system))
-        X265.CONFIGURE.extra += -DWIN32=ON -DWINXP_SUPPORT=ON
-    endif
-...
-```
-#####after
-```
-...
-X265.CONFIGURE.shared      = -DENABLE_SHARED=OFF
-X265.CONFIGURE.extra       = -DENABLE_CLI=OFF -DHIGH_BIT_DEPTH=ON
-...
-    ifeq (mingw,$(BUILD.system))
-        X265.CONFIGURE.extra += -DWIN32=OFF -DWINXP_SUPPORT=OFF
-    endif
-...
-```
-4. Now build handbrake without the gui
-```
-./configure --launch --launch-jobs=0 --disable-gtk
-```
-5. Move the 10bit build of handbrake into your bin directory (assuming you're on linux). h265ize will automatically look for HandBrakeCLI10bit in your path.
-```
-mv build/HandBrakeCLI /bin/HandBrakeCLI10bit
-```
-6. Winning. You're now ready to encode 10bit videos.
-
 ## Usage
 ./h265izer [-h(help)] [-d &lt;string&gt;] [-q &lt;0|51&gt;] [-m &lt;string&gt;] [-n &lt;string&gt;{3}] [-t &lt;string&gt;] [-f &lt;string&gt;{3}] [-g &lt;string&gt;] [-l &lt;integer&gt;] [-a] [-o] [-p] [-u] [-v] &lt;file|directory&gt;
 ### Options
@@ -137,3 +89,51 @@ mv build/HandBrakeCLI /bin/HandBrakeCLI10bit
 #### Examples
 * ./h265izer -v big_buck_bunny_1080p_h264.mov
 * ./h265izer -v -d /home -q 25 -g /tmp big_buck_bunny_folder
+
+## Creating 10bit encodes
+In order to encode 10bit encodes you must build handbrake yourself with a 10bit x265 build. In order to do this, follow these steps
+
+1. Copy the handbrake respository
+```
+svn checkout svn://svn.handbrake.fr/HandBrake/trunk hb-trunk
+```
+2. Change directories to the repository you just downloaded
+```
+cd hb-trunk
+```
+3. Edit the module.defs file for x265 (in this case using vim)
+```
+vim contrib/x265/module.defs
+```
+Change `-DHIGH_BIT_DEPTH=OFF` to `-DHIGH_BIT_DEPTH=ON` and `-DWIN32=ON -DWINXP_SUPPORT=ON` to `-DWIN32=OFF -DWINXP_SUPPORT=OFF`
+#####before
+```
+...
+X265.CONFIGURE.shared      = -DENABLE_SHARED=OFF
+X265.CONFIGURE.extra       = -DENABLE_CLI=OFF -DHIGH_BIT_DEPTH=OFF
+...
+    ifeq (mingw,$(BUILD.system))
+        X265.CONFIGURE.extra += -DWIN32=ON -DWINXP_SUPPORT=ON
+    endif
+...
+```
+#####after
+```
+...
+X265.CONFIGURE.shared      = -DENABLE_SHARED=OFF
+X265.CONFIGURE.extra       = -DENABLE_CLI=OFF -DHIGH_BIT_DEPTH=ON
+...
+    ifeq (mingw,$(BUILD.system))
+        X265.CONFIGURE.extra += -DWIN32=OFF -DWINXP_SUPPORT=OFF
+    endif
+...
+```
+4. Now build handbrake without the gui
+```
+./configure --launch --launch-jobs=0 --disable-gtk
+```
+5. Move the 10bit build of handbrake into your bin directory (assuming you're on linux). h265ize will automatically look for HandBrakeCLI10bit in your path.
+```
+mv build/HandBrakeCLI /bin/HandBrakeCLI10bit
+```
+6. Winning. You're now ready to encode 10bit videos.
