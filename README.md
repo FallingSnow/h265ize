@@ -137,3 +137,11 @@ X265.CONFIGURE.extra       = -DENABLE_CLI=OFF -DHIGH_BIT_DEPTH=ON
 mv build/HandBrakeCLI /bin/HandBrakeCLI10bit
 ```
 6. Winning. You're now ready to encode 10bit videos.
+
+## Commercial Interests
+There is a paid h265ize version available that includes the following additional automated features:
+- Clustered encoding using TORQUE Resource Manager. Includes the ability to:
+  - define the number of nodes used
+  - define how many encoded segments should be used so nodes with different levels of encoding power can be used
+
+Please contact [ayrton@sparling.us](mailto:ayrton@sparling.us?Subject=h265ize%20Commercial%20Interest) for more information.
