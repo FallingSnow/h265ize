@@ -20,12 +20,15 @@ defaults+=([verbose]=0) # Verbose Mode; Prints extra output; I actually spent a 
 defaults+=([preview]=0) # Preview Mode; Only outputs a video sigment with the specified previewLength; default: 0
 defaults+=([override]=0) # Override Mode; Allows videos already encoded with the h265 codec to be re-encoded; default: 0
 defaults+=([upconvert]=1) # Upconvert Mode; Converts vob/dvd subs to srt format; Only works with mkv's; default: 1
+defaults+=([stats]=0) # Generate stats file located at [destination]/h265ize.stats; default: 0
 defaults+=([debug]=0) # Debug Mode; Print extra debugging information; default: 0
 defaults+=([smart]=0) # Smart Mode; This isn't ready and doesnt work, please don't enable this feature; default: 0
 
 # DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
 ################################################################################
 ################################################################################
+
+declare -A options
 
 # Colors
 green='\033[0;32m'
@@ -38,87 +41,72 @@ NC='\033[0m' # No Color
 
 package="h265ize"
 description="Convert videos into x265 videos."
-version="0.2.0"
+version="0.2.1"
 commandDesciptions="
-  -a :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
-  -d :(NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
-  -f :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
-  -g :(NO TRAILING SLASH) Directory where new unfinished file is stored
-  -l :Seconds to be encoded in preview mode; default: 30
-  -m :x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
-  -n :Your native language; Examples: eng, fre, spa, dut; default: eng
-  -o :Override mode; Allows conversion of videos that are already encoded by the hevc codec
-  -p :Preview mode; Only processes the first ${defaults[previewLength]} seconds
-  -q :0-51; default: 19
-  -t :Temporary name of the new unfinished file
-  -u :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
-  -v :Verbose mode; Display extra output
-  -x :Extra options; Experimental, can lead to glitchy encodes; Not Recommended
-  -h :Help; Shows this help page
-  --debug :Debug mode; Print extra debugging information
-  --aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
-      > finalCut: Uses the slow preset and allows QP to shift between 19 and 23
-      > animeHigh: Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these are high latency encodes
-  --help :Help; Shows this help page
+-a :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
+-d :(NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
+-f :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
+-g :(NO TRAILING SLASH) Directory where new unfinished file is stored
+-l :Seconds to be encoded in preview mode; default: 30
+-m :x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
+-n :Your native language; Examples: eng, fre, spa, dut; default: eng
+-o :Override mode; Allows conversion of videos that are already encoded by the hevc codec
+-p :Preview mode; Only processes the first ${defaults[previewLength]} seconds
+-q :0-51; default: 19
+-t :Temporary name of the new unfinished file
+-u :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
+-v :Verbose mode; Display extra output
+-x :Extra options; Experimental, can lead to glitchy encodes; Not Recommended
+-h :Help; Shows this help page
+--debug :Debug mode; Print extra debugging information
+--aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
+> finalCut: Uses the slow preset and allows QP to shift between 19 and 23
+> animeHigh: Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these are high latency encodes
+--help :Help; Shows this help page
 "
 how="Usage: $0 [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] <file|directory> )"
 
 usage() {
-	echo $how 1>&2
-	exit 0
+    echo $how 1>&2
+    exit 0
 }
 helps() {
-	echo "$package   Version: $version"
-	echo "Description: $description" 1>&2
-	echo $how 1>&2
-	echo "Commands:$commandDesciptions" 1>&2
-	exit 0
+    echo "$package   Version: $version"
+    echo "Description: $description" 1>&2
+    echo $how 1>&2
+    echo "Commands:$commandDesciptions" 1>&2
+    exit 0
 }
 debug(){
-	if [ ${options[debug]} -eq 1 ]; then echo -e "${green}[$package]${NC}: ${cyan}[Debug]${NC} $1"; fi
+    if [ ${options[debug]} -eq 1 ]; then echo -e "${green}[$package]${NC}: ${cyan}[Debug]${NC} $1"; fi
 }
 warn() {
-	echo -e "${yellow}[$package]$NC: $1"
+    echo -e "${yellow}[$package]$NC: $1"
 }
 verbose(){
-	if [ ${options[verbose]} -eq 1 ]; then echo -e "${1}[$package]${NC}: ${lightb}[Verbose]${NC} $2"; fi
+    if [ ${options[verbose]} -eq 1 ]; then echo -e "${1}[$package]${NC}: ${lightb}[Verbose]${NC} $2"; fi
 }
 error() {
-	echo -e "${red}[$package]$NC: $1"
+    echo -e "${red}[$package]$NC: $1"
 }
 log() {
-	echo -e "${green}[$package]$NC: $1"
+    echo -e "${green}[$package]$NC: $1"
 }
-
-# Tests
-number='^[0-9]+$'
-function isNumber() {
-	if ! [[ $1 =~ $re ]]; then
-		return 0
-	else
-		return 1
-	fi
-}
-function isDirectory() {
-  if [[ -d "$1" ]] && [[ -n "$1" ]]; then
-    return 0
-  else
-    return 1
-  fi
+replace() {
+    echo -ne "\r\e[K$1"
 }
 
 # Test getopt
 if [ $(getopt --test; echo $?) -ne 4 ]; then
-	error "You have a bad getopt version! Please update getopt."
+    error "You have a bad getopt version! Please update getopt."
 fi
 
-declare -A options
-flags=$(getopt -o :d:q:m:n:t:f:g:l:x:vphaou -l aspreset:,debug,help -- "$@")
+flags=$(getopt -o :d:q:m:n:t:f:g:l:x:vphaou -l aspreset:,stats,debug,help -- "$@")
 eval set -- "$flags"
 while [ $# -gt 0 ]; do
     case "$1" in
         -a)
-			options[accurateTimestamps]=1
+            options[accurateTimestamps]=1
             ;;
         -d)
             options[destination]="$2"; shift
@@ -153,7 +141,7 @@ while [ $# -gt 0 ]; do
         -t)
             options[tempName]="$2"; shift
             ;;
-		-u)
+        -u)
             options[upconvert]=0
             ;;
         -v)
@@ -162,105 +150,113 @@ while [ $# -gt 0 ]; do
         -x)
             options[extraOptions]="$2"; shift
             ;;
-		--aspreset)
+        --aspreset)
             options[aspreset]="$2"; shift
             ;;
-		--debug)
+        --stats)
+            options[stats]=1
+            ;;
+        --debug)
             options[debug]=1
             ;;
-		# --smart)
+        # --smart)
             # options[smart]=1
             # ;;
-		# --multi-pass)
+        # --multi-pass)
             # options[multipass]=1
             # ;;
         -h)
             helps
             ;;
-		--help)
+        --help)
             helps
             ;;
         \?)
             usage
             ;;
-		--) shift; break;;
-		*)  break;;
+        --) shift; break;;
+        *)  break;;
     esac
-	shift
+    shift
 done
 
 # Check if a aspreset has been enabled
 if [ -n "${options[aspreset]}" ]; then
-	case "${options[aspreset]}" in
-		"finalCut")
-			defaults[quality]=21;defaults[preset]="slow";defaults[extraOptions]="aq-mode=1:aq-strength=2.0" # Allows for a Constant QP shift between 19-23
-			;;
-		"animeHigh")
-			defaults[quality]=19;defaults[preset]="medium";defaults[extraOptions]="weightb=1:bframe-bias=90:rc-lookahead=240:me=umh:max-merge=5:rect:ctu=64:b-adapt=2:tu-inter-depth=4:tu-intra-depth=4:ipratio=0.8"
-			;;
-		"perfect")
-			defaults[quality]=19;defaults[preset]="fast"
-			;;
-		*)
-			error "Unknown aspreset ${options[aspreset]}."
-			exit 101
-	esac
+    case "${options[aspreset]}" in
+        "finalCut")
+            defaults[quality]=21;defaults[preset]="medium";defaults[extraOptions]="aq-mode=1:aq-strength=2.0" # Allows for a Constant QP shift between 19-23
+            ;;
+        "animeHigh")
+            defaults[quality]=19;defaults[preset]="medium";defaults[extraOptions]="weightb=1:bframes=11:bframe-bias=90:rc-lookahead=60:me=dia:max-merge=5:rect:ctu=64:b-adapt=2:tu-inter-depth=4:tu-intra-depth=4:ipratio=0.8" #ref=6:subme=4
+            ;;
+        "animeLow")
+            defaults[quality]=25;defaults[preset]="medium";defaults[extraOptions]="aq-mode=1:aq-strength=1.5:bframes=8:weightb=1:bframe-bias=95:rc-lookahead=60:keyint=1200:me=star:max-merge=5:rect:ctu=64:b-adapt=2:tu-inter-depth=4:tu-intra-depth=4:ipratio=0.6"
+            ;;
+        "perfect")
+            defaults[quality]=19;defaults[preset]="fast"
+            ;;
+        *)
+            error "Unknown aspreset ${options[aspreset]}."
+            exit 101
+    esac
 fi
 
 # Merge options with defaults
 for index in "${!defaults[@]}";do
-  if [ ! -n "${options[$index]}" ];then
-	options[$index]="${defaults[$index]}"
-  fi
+    if [ ! -n "${options[$index]}" ];then
+        options[$index]="${defaults[$index]}"
+    fi
 done
 
 # Debug
 debug "Options -----------------------------------------"
 for index in "${!options[@]}"; do
-	debug " key   : $index"
-	debug "value  : ${options[$index]}"
+    debug " key   : $index"
+    debug "value  : ${options[$index]}"
 done
 
 # Make sure output directory exists
 if [[ ! -d "${options[destination]}" ]]; then
-	warn "Output destination \"${options[destination]}\" does not exist. Would you like to create it? [y/N]: "
-	while true; do
-		read yn
-		case $yn in
-			[Yy]* ) mkdir ${options[destination]}; break;;
-			[Nn]* ) exit 2;;
-			* ) exit 2;;
-		esac
-	done
+    warn "Output destination \"${options[destination]}\" does not exist. Would you like to create it? [y/N]: "
+    while true; do
+        read yn
+        case $yn in
+            [Yy]* ) mkdir ${options[destination]}; break;;
+            [Nn]* ) exit 2;;
+            * ) exit 2;;
+        esac
+    done
 fi
 # Make sure temp output directory exists
 if [[ ! -d "${options[tempDir]}" ]]; then
-	warn "Temporary output destination \"${options[tempDir]}\" does not exist. Would you like to create it? [y/N]: "
-	while true; do
-		read yn
-		case $yn in
-			[Yy]* ) mkdir ${options[tempDir]}; break;;
-			[Nn]* ) exit 2;;
-			* ) exit 2;;
-		esac
-	done
+    warn "Temporary output destination \"${options[tempDir]}\" does not exist. Would you like to create it? [y/N]: "
+    while true; do
+        read yn
+        case $yn in
+            [Yy]* ) mkdir ${options[tempDir]}; break;;
+            [Nn]* ) exit 2;;
+            * ) exit 2;;
+        esac
+    done
 fi
 
 # Check if handbrake is installed
 hash "bc" 2>/dev/null || { error "bc is not installed. bc must be installed!"; exit 9; }
 
 declare -A ICO3TONAME
-ICO3TONAME=(["aar"]="Afar" ["abk"]="Abkhazian" ["afr"]="Afrikaans" ["aka"]="Akan" ["alb"]="Albanian" ["amh"]="Amharic" ["ara"]="Arabic" ["arg"]="Aragonese" ["arm"]="Armenian" ["asm"]="Assamese" ["ava"]="Avaric" ["ave"]="Avestan" ["aym"]="Aymara" ["aze"]="Azerbaijani" ["bak"]="Bashkir" ["bam"]="Bambara" ["baq"]="Basque" ["bel"]="Belarusian" ["ben"]="Bengali" ["bih"]="Bihari languages" ["bis"]="Bislama" ["bos"]="Bosnian" ["bre"]="Breton" ["bul"]="Bulgarian" ["bur"]="Burmese" ["cat"]="Catalan; Valencian" ["cha"]="Chamorro" ["che"]="Chechen" ["chi"]="Chinese" ["chu"]="Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic" ["chv"]="Chuvash" ["cor"]="Cornish" ["cos"]="Corsican" ["cre"]="Cree" ["cze"]="Czech" ["dan"]="Danish" ["div"]="Divehi; Dhivehi; Maldivian" ["dut"]="Dutch; Flemish" ["dzo"]="Dzongkha" ["eng"]="English" ["epo"]="Esperanto" ["est"]="Estonian" ["ewe"]="Ewe" ["fao"]="Faroese" ["fij"]="Fijian" ["fin"]="Finnish" ["fre"]="French" ["fry"]="Western Frisian" ["ful"]="Fulah" ["geo"]="Georgian" ["ger"]="German" ["gla"]="Gaelic; Scottish Gaelic" ["gle"]="Irish" ["glg"]="Galician" ["glv"]="Manx" ["gre"]="Greek, Modern (1453-)" ["grn"]="Guarani" ["guj"]="Gujarati" ["hat"]="Haitian; Haitian Creole" ["hau"]="Hausa" ["heb"]="Hebrew" ["her"]="Herero" ["hin"]="Hindi" ["hmo"]="Hiri Motu" ["hrv"]="Croatian" ["hun"]="Hungarian" ["ibo"]="Igbo" ["ice"]="Icelandic" ["ido"]="Ido" ["iii"]="Sichuan Yi; Nuosu" ["iku"]="Inuktitut" ["ile"]="Interlingue; Occidental" ["ina"]="Interlingua (International Auxiliary Language Association)" ["ind"]="Indonesian" ["ipk"]="Inupiaq" ["ita"]="Italian" ["jav"]="Javanese" ["jpn"]="Japanese" ["kal"]="Kalaallisut; Greenlandic" ["kan"]="Kannada" ["kas"]="Kashmiri" ["kau"]="Kanuri" ["kaz"]="Kazakh" ["khm"]="Central Khmer" ["kik"]="Kikuyu; Gikuyu" ["kin"]="Kinyarwanda" ["kir"]="Kirghiz; Kyrgyz" ["kom"]="Komi" ["kon"]="Kongo" ["kor"]="Korean" ["kua"]="Kuanyama; Kwanyama" ["kur"]="Kurdish" ["lao"]="Lao" ["lat"]="Latin" ["lav"]="Latvian" ["lim"]="Limburgan; Limburger; Limburgish" ["lin"]="Lingala" ["lit"]="Lithuanian" ["ltz"]="Luxembourgish; Letzeburgesch" ["lub"]="Luba-Katanga" ["lug"]="Ganda" ["mac"]="Macedonian" ["mah"]="Marshallese" ["mal"]="Malayalam" ["mao"]="Maori" ["mar"]="Marathi" ["may"]="Malay" ["mlg"]="Malagasy" ["mlt"]="Maltese" ["mon"]="Mongolian" ["nau"]="Nauru" ["nav"]="Navajo; Navaho" ["nbl"]="Ndebele, South; South Ndebele" ["nde"]="Ndebele, North; North Ndebele" ["ndo"]="Ndonga" ["nep"]="Nepali" ["nno"]="Norwegian Nynorsk; Nynorsk, Norwegian" ["nob"]="Bokmål, Norwegian; Norwegian Bokmål" ["nor"]="Norwegian" ["nya"]="Chichewa; Chewa; Nyanja" ["oci"]="Occitan (post 1500); Provençal" ["oji"]="Ojibwa" ["ori"]="Oriya" ["orm"]="Oromo" ["oss"]="Ossetian; Ossetic" ["pan"]="Panjabi; Punjabi" ["per"]="Persian" ["pli"]="Pali" ["pol"]="Polish" ["por"]="Portuguese" ["pus"]="Pushto; Pashto" ["que"]="Quechua" ["roh"]="Romansh" ["rum"]="Romanian; Moldavian; Moldovan" ["run"]="Rundi" ["rus"]="Russian" ["sag"]="Sango" ["san"]="Sanskrit" ["sin"]="Sinhala; Sinhalese" ["slo"]="Slovak" ["slv"]="Slovenian" ["sme"]="Northern Sami" ["smo"]="Samoan" ["sna"]="Shona" ["snd"]="Sindhi" ["som"]="Somali" ["sot"]="Sotho, Southern" ["spa"]="Spanish; Castilian" ["srd"]="Sardinian" ["srp"]="Serbian" ["ssw"]="Swati" ["sun"]="Sundanese" ["swa"]="Swahili" ["swe"]="Swedish" ["tah"]="Tahitian" ["tam"]="Tamil" ["tat"]="Tatar" ["tel"]="Telugu" ["tgk"]="Tajik" ["tgl"]="Tagalog" ["tha"]="Thai" ["tib"]="Tibetan" ["tir"]="Tigrinya" ["ton"]="Tonga (Tonga Islands)" ["tsn"]="Tswana" ["tso"]="Tsonga" ["tuk"]="Turkmen" ["tur"]="Turkish" ["twi"]="Twi" ["uig"]="Uighur; Uyghur" ["ukr"]="Ukrainian" ["urd"]="Urdu" ["uzb"]="Uzbek" ["ven"]="Venda" ["vie"]="Vietnamese" ["vol"]="Volapük" ["wel"]="Welsh" ["wln"]="Walloon" ["wol"]="Wolof" ["xho"]="Xhosa" ["yid"]="Yiddish" ["yor"]="Yoruba" ["zha"]="Zhuang; Chuang" ["zul"]="Zulu")
-
+ICO3TONAME=(["aar"]="Afar" ["abk"]="Abkhazian" ["afr"]="Afrikaans" ["aka"]="Akan" ["alb"]="Albanian" ["amh"]="Amharic" ["ara"]="Arabic" ["arg"]="Aragonese" ["arm"]="Armenian" ["asm"]="Assamese" ["ava"]="Avaric" ["ave"]="Avestan" ["aym"]="Aymara" ["aze"]="Azerbaijani" ["bak"]="Bashkir" ["bam"]="Bambara" ["baq"]="Basque" ["bel"]="Belarusian" ["ben"]="Bengali" ["bih"]="Bihari languages" ["bis"]="Bislama" ["bos"]="Bosnian" ["bre"]="Breton" ["bul"]="Bulgarian" ["bur"]="Burmese" ["cat"]="Catalan; Valencian" ["cha"]="Chamorro" ["che"]="Chechen" ["chi"]="Chinese" ["chu"]="Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic" ["chv"]="Chuvash" ["cor"]="Cornish" ["cos"]="Corsican" ["cre"]="Cree" ["cze"]="Czech" ["dan"]="Danish" ["div"]="Divehi; Dhivehi; Maldivian" ["dut"]="Dutch; Flemish" ["dzo"]="Dzongkha" ["eng"]="English" ["epo"]="Esperanto" ["est"]="Estonian" ["ewe"]="Ewe" ["fao"]="Faroese" ["fij"]="Fijian" ["fin"]="Finnish" ["fre"]="French" ["fry"]="Western Frisian" ["ful"]="Fulah" ["geo"]="Georgian" ["ger"]="German" ["gla"]="Gaelic; Scottish Gaelic" ["gle"]="Irish" ["glg"]="Galician" ["glv"]="Manx" ["gre"]="Greek, Modern (1453-)" ["grn"]="Guarani" ["guj"]="Gujarati" ["hat"]="Haitian; Haitian Creole" ["hau"]="Hausa" ["heb"]="Hebrew" ["her"]="Herero" ["hin"]="Hindi" ["hmo"]="Hiri Motu" ["hrv"]="Croatian" ["hun"]="Hungarian" ["ibo"]="Igbo" ["ice"]="Icelandic" ["ido"]="Ido" ["iii"]="Sichuan Yi; Nuosu" ["iku"]="Inuktitut" ["ile"]="Interlingue; Occidental" ["ina"]="Interlingua (International Auxiliary Language Association)" ["ind"]="Indonesian" ["ipk"]="Inupiaq" ["ita"]="Italian" ["jav"]="Javanese" ["jpn"]="Japanese" ["kal"]="Kalaallisut; Greenlandic" ["kan"]="Kannada" ["kas"]="Kashmiri" ["kau"]="Kanuri" ["kaz"]="Kazakh" ["khm"]="Central Khmer" ["kik"]="Kikuyu; Gikuyu" ["kin"]="Kinyarwanda" ["kir"]="Kirghiz; Kyrgyz" ["kom"]="Komi" ["kon"]="Kongo" ["kor"]="Korean" ["kua"]="Kuanyama; Kwanyama" ["kur"]="Kurdish" ["lao"]="Lao" ["lat"]="Latin" ["lav"]="Latvian" ["lim"]="Limburgan; Limburger; Limburgish" ["lin"]="Lingala" ["lit"]="Lithuanian" ["ltz"]="Luxembourgish; Letzeburgesch" ["lub"]="Luba-Katanga" ["lug"]="Ganda" ["mac"]="Macedonian" ["mah"]="Marshallese" ["mal"]="Malayalam" ["mao"]="Maori" ["mar"]="Marathi" ["may"]="Malay" ["mlg"]="Malagasy" ["mlt"]="Maltese" ["mon"]="Mongolian" ["nau"]="Nauru" ["nav"]="Navajo; Navaho" ["nbl"]="Ndebele, South; South Ndebele" ["nde"]="Ndebele, North; North Ndebele" ["ndo"]="Ndonga" ["nep"]="Nepali" ["nno"]="Norwegian Nynorsk; Nynorsk, Norwegian" ["nob"]="Bokmål, Norwegian; Norwegian Bokmål" ["nor"]="Norwegian" ["nya"]="Chichewa; Chewa; Nyanja" ["oci"]="Occitan (post 1500); Provençal" ["oji"]="Ojibwa" ["ori"]="Oriya" ["orm"]="Oromo" ["oss"]="Ossetian; Ossetic" ["pan"]="Panjabi; Punjabi" ["per"]="Persian" ["pli"]="Pali" ["pol"]="Polish" ["por"]="Portuguese" ["pus"]="Pushto; Pashto" ["que"]="Quechua" ["roh"]="Romansh" ["rum"]="Romanian; Moldavian; Moldovan" ["run"]="Rundi" ["rus"]="Russian" ["sag"]="Sango" ["san"]="Sanskrit" ["sin"]="Sinhala; Sinhalese" ["slo"]="Slovak" ["slv"]="Slovenian" ["sme"]="Northern Sami" ["smo"]="Samoan" ["sna"]="Shona" ["snd"]="Sindhi" ["som"]="Somali" ["sot"]="Sotho, Southern" ["spa"]="Spanish; Castilian" ["srd"]="Sardinian" ["srp"]="Serbian" ["ssw"]="Swati" ["sun"]="Sundanese" ["swa"]="Swahili" ["swe"]="Swedish" ["tah"]="Tahitian" ["tam"]="Tamil" ["tat"]="Tatar" ["tel"]="Telugu" ["tgk"]="Tajik" ["tgl"]="Tagalog" ["tha"]="Thai" ["tib"]="Tibetan" ["tir"]="Tigrinya" ["ton"]="Tonga (Tonga Islands)" ["tsn"]="Tswana" ["tso"]="Tsonga" ["tuk"]="Turkmen" ["tur"]="Turkish" ["twi"]="Twi" ["uig"]="Uighur; Uyghur" ["ukr"]="Ukrainian" ["urd"]="Urdu" ["uzb"]="Uzbek" ["ven"]="Venda" ["vie"]="Vietnamese" ["vol"]="Volapük" ["wel"]="Welsh" ["wln"]="Walloon" ["wol"]="Wolof" ["xho"]="Xhosa" ["yid"]="Yiddish" ["yor"]="Yoruba" ["zha"]="Zhuang; Chuang" ["zul"]="Zulu" ["unk"]="Unknown" ["und"]="Unknown")
 DIRECTORY=${1%/}
 PARENTDIRECTORY="$(dirname "$DIRECTORY")"
-FILES=$(find "$DIRECTORY" -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p')
-# ISOs are currently no supported
+log "Finding videos..."
+FILES=$(find "$DIRECTORY" -maxdepth 2 -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p')
+debug "Found:"
+printf '%s\n' "${my_array[@]}"
+# ISOs are currently not supported
 #FILES=$(find "$DIRECTORY" -type f -name '*.MXF')
 #FFPROBE="ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000"
 if [ ! -n "$FILES" ]; then
-	error "No video files found."
-	exit 3;
+    error "No video files found."
+    exit 3;
 fi
 
 # http://stackoverflow.com/questions/9256644/identifying-received-signal-name-in-bash-shell-script
@@ -270,458 +266,525 @@ trap_with_arg() {
         trap "$func $sig" "$sig"
     done
 }
-cleanup(){
-	warn "$package did not end cleanly. Deleting temp file and extra files."
+cleanup() {
+    warn "$package did not end cleanly. Deleting temp file and extra files."
     /bin/rm -f "${tempVars[tempOutput]}";
-	/bin/rm -f ${tempVars[cleanupFiles]}
-	
-	exit 4;
-}
+    /bin/rm -f ${tempVars[cleanupFiles]}
 
+    exit 4
+}
 mapSubtitles() {
-	tempVars+=([ffmpegQuery]="/bin/ffmpeg -loglevel error -hide_banner -i \"${tempVars[tempOutput]}\" ${tempVars[additionalInputs]} -c copy -y ${tempVars[ffmpegStreamMap]} ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null")
-	
-	log "Setting subtitle names..."
-	verbose $green "${red}[Query]$NC ${tempVars[ffmpegQuery]}"
-	eval "${tempVars[ffmpegQuery]}"
-	wait $!
-	if [ $? -ne 0 ]; then
-		error "Ut oh. Ffmpeg exited with error code $?."
-		cleanup
-	fi
-	
-	if [ -n "${tempVars[setNewDefault]}" ]; then
-		log "Removing any left over subtitle defaults..."
-		for b in $(seq $((${tempVars[onSubtitleNumber]}))); do
-			local subtitles+="--edit track:s$b --set flag-default=0 "
-		done
-		
-		local query="mkvpropedit ${tempVars[output]} $subtitles"
-		verbose $green "${red}[Query]$NC $query"
-		eval "$query"
-		
-		log "Setting new default subtitle..."
-		local query="mkvpropedit ${tempVars[output]} --edit track:s${tempVars[setNewDefault]} --set flag-default=1"
-		verbose $green "${red}[Query]$NC $query"
-		eval "$query"
-	fi
-	
-	/bin/rm -f ${tempVars[cleanupFiles]}
+    tempVars+=([ffmpegQuery]="/bin/ffmpeg -loglevel error -hide_banner -i \"${tempVars[tempOutput]}\" ${tempVars[additionalInputs]} -c copy -y ${tempVars[ffmpegVideoStreamMap]} ${tempVars[ffmpegAudioStreamMap]} ${tempVars[ffmpegSubititleStreamMap]} ${tempVars[ffmpegOtherStreamMap]} ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null &")
+    log "Setting subtitle names..."
+
+    debug "${red}[Query]$NC ${tempVars[ffmpegQuery]}"
+    eval "${tempVars[ffmpegQuery]}"
+    wait $!
+
+    error="$?"
+    if [ "$error" -ne 0 ]; then
+        error "Ut oh. Ffmpeg exited with error code $error."
+        cleanup
+    fi
+
+    if [ -n "${tempVars[setNewDefault]}" ]; then
+        log "Removing any left over subtitle defaults..."
+        for b in $(seq $((${tempVars[onSubtitleNumber]}))); do
+            local subtitles+="--edit track:s$b --set flag-default=0 "
+        done
+
+        local query="mkvpropedit ${tempVars[output]} $subtitles"
+        debug "${red}[Query]$NC $query"
+        eval "$query"
+
+        log "Setting new default subtitle..."
+        local query="mkvpropedit ${tempVars[output]} --edit track:s${tempVars[setNewDefault]} --set flag-default=1"
+        debug "${red}[Query]$NC $query"
+        eval "$query"
+    fi
+
+    /bin/rm -f ${tempVars[cleanupFiles]}
 }
 
 # Takes ${tempVars[query]}
 handbrakeFile() {
-	verbose $green "${red}[Query]$NC $1"
-	
-	echo -e "${green}[h265ize]${NC}: Handbraking... -----------------------------------------------------"
-	
-	eval "$1"
-	wait $!
-	if [ ! $? -eq 0 ]; then
-		error "Ut oh. Handbrake exited with error code $?."
-		cleanup
-	fi
-	
-	echo -e "${green}[h265ize]${NC}: Handbraking Complete -----------------------------------------------"
+    debug "${red}[Query]$NC $1"
+
+    echo -e "${green}[h265ize]${NC}: Handbraking... -----------------------------------------------------"
+
+    #while read line; do
+    #    echo "LINE: $line"
+    #    if [ -z "$($line | grep -E 'Encoding: task [0-9]* of [0-9]*, [0-9]{1,3}\.[0-9]{1,3} %' | awk -F' % ' '{print $1}' | awk -F', ' '{print $2}')"]; then
+    #        echo "FOUND YOU!";
+    #    fi
+    #done < <(eval "$1")
+
+    #$(strace -p1234 -s9999 -e write)
+    #while [ ps -p $! > /dev/null ]; do
+
+    #done
+
+    eval "$1 &"
+
+    wait $!
+
+    error=$?
+    if [ ! $? -eq 0 ]; then
+        error "Ut oh. Handbrake exited with error code $error."
+        cleanup
+    fi
+
+    echo -e "${green}[h265ize]${NC}: Handbraking Complete -----------------------------------------------"
 }
 
 # Takes ${tempVars[tempOutput]}
 upconvertSubtitles() {
-	if [ ${#vobSubtitlesTrackIds[@]} -lt 1 ] || [ ${options[upconvert]} -eq 0 ]; then
-		return
-	fi
-		
-	# Check if mkvextract is installed
-	hash "mkvextract" 2>/dev/null || { warn "mkvextract(mkvtoolnix-cli) is not installed. mkvextract(mkvtoolnix-cli) must be installed to upconvert subtitles! Skipped upconverting vobsubs."; return; }
-	hash "vobsub2srt" 2>/dev/null || { warn "vobsub2srt is not installed. vobsub2srt must be installed to upconvert subtitles! Skipped upconverting vobsubs."; return; }
-	
-	if [ "${options[preview]}" = 1 ]; then
-		warn "Upconverted subtitle triming for previews is currently not supported. The whole subtitle will be added to the preview."
-		# return
-	fi
-	
-	log "Coverting vobsub subtitles to srt subtitles..."
+    if [ ${#vobSubtitlesTrackIds[@]} -lt 1 ] || [ ${options[upconvert]} -eq 0 ]; then
+        return
+    fi
 
-	local tracks=""
-	for c in "${vobSubtitlesTrackIds[@]}"; do
-		tracks="$tracks $c:${1%.*}-vobsub$c"
-	done
-	
-	verbose $green "$red[Query]$NC mkvextract tracks \"$FILE\"$tracks"
-	eval "mkvextract tracks \"$FILE\"$tracks"
-	wait $!
-	
-	for c in "${vobSubtitlesTrackIds[@]}"; do
-		eval "vobsub2srt ${1%.*}-vobsub$c"
-		wait $!
-		/bin/rm -f "${1%.*}-vobsub$c.sub"
-		/bin/rm -f "${1%.*}-vobsub$c.idx"
-	done
-	
-	for c in "${vobSubtitlesTrackIds[@]}"; do
-		tempVars+=([cleanupFiles]="${1%.*}-vobsub$c.srt ${1%.*}-vobsub$c.sub ${1%.*}-vobsub$c.idx ")
-		tempVars+=([additionalInputs]="-i ${1%.*}-vobsub$c.srt ")
-	done
+    # Check if mkvextract is installed
+    hash "mkvextract" 2>/dev/null || { warn "mkvextract(mkvtoolnix-cli) is not installed. mkvextract(mkvtoolnix-cli) must be installed to upconvert subtitles! Skipped upconverting vobsubs."; return; }
+    hash "vobsub2srt" 2>/dev/null || { warn "vobsub2srt is not installed. vobsub2srt must be installed to upconvert subtitles! Skipped upconverting vobsubs."; return; }
+
+    if [ "${options[preview]}" = 1 ]; then
+        warn "Upconverted subtitle triming for previews is currently not supported. The whole subtitle will be added to the preview."
+        # return
+    fi
+
+    log "Coverting vobsub subtitles to srt subtitles..."
+
+    local tracks=""
+    for c in "${vobSubtitlesTrackIds[@]}"; do
+        tracks="$tracks $c:${1%.*}-vobsub$c"
+    done
+
+    verbose $green "$red[Query]$NC mkvextract tracks \"$FILE\"$tracks"
+    eval "mkvextract tracks \"$FILE\"$tracks"
+    wait $!
+
+    for c in "${vobSubtitlesTrackIds[@]}"; do
+        eval "vobsub2srt ${1%.*}-vobsub$c"
+        wait $!
+        /bin/rm -f "${1%.*}-vobsub$c.sub"
+        /bin/rm -f "${1%.*}-vobsub$c.idx"
+    done
+
+    for c in "${vobSubtitlesTrackIds[@]}"; do
+        tempVars+=([cleanupFiles]="${1%.*}-vobsub$c.srt ${1%.*}-vobsub$c.sub ${1%.*}-vobsub$c.idx ")
+        tempVars+=([additionalInputs]="-i ${1%.*}-vobsub$c.srt ")
+    done
 }
 
 trap_with_arg cleanup INT TERM
 startTime=$(date +"%b %d %r") # Time since h265ize script was invoked
+scriptStart=$(date)
 verbose $green "Folder processing started on $yellow$startTime$NC"
 
 filesNotAcceptable=0
 
 while read -r FILE; do
-	
-	# Make sure temp variables are clear
-	unset tempVars
-	declare -A tempVars
 
-	tempVars+=([filenameWithExtention]=$(basename "$FILE"))
-	tempVars+=([fileExtension]="${FILE##*.}")
-	tempVars+=([filename]=$(basename "${FILE%.*}"))
-	tempVars+=([fileDir]="${FILE%/*}")
-	toBeRemoved=$(printf '%q' "$PARENTDIRECTORY")
-	tempVars+=([relativeDir]="${tempVars[fileDir]#$toBeRemoved}")
-	debug "FILEDIR: ${tempVars[fileDir]} PARENTDIR: $PARENTDIRECTORY  RELATIVEDIR: ${tempVars[relativeDir]}"
-	tempVars+=([fileWithDir]="${FILE%.*}")
-	tempVars+=([fileEscaped]=$(printf '%q' "$FILE"))
-	tempVars+=([filenameEscaped]=$(printf '%q' "${tempVars[filename]}"))
+    # Make sure temp variables are clear
+    unset tempVars
+    declare -A tempVars
 
-	if [ "${options[preview]}" -eq 1 ]; then
-		tempVars+=([previewSuffix]="-preview")
-	fi
+    tempVars[fileSize]=$(stat --printf="%s" "$FILE")
+    tempVars[fileSize]=$(echo "scale=0; ${tempVars[fileSize]}/1000000" | bc)
+    tempVars+=([filenameWithExtention]=$(basename "$FILE"))
+    tempVars+=([fileExtension]="${FILE##*.}")
+    tempVars+=([filename]=$(basename "${FILE%.*}"))
+    tempVars+=([fileDir]="${FILE%/*}")
+    toBeRemoved=$(printf '%q' "$PARENTDIRECTORY")
+    tempVars+=([relativeDir]="${tempVars[fileDir]#$toBeRemoved}")
+    debug "File directory: ${tempVars[fileDir]}"
+    debug "Parent directory: $PARENTDIRECTORY"
+    debug "Resulting relative directory: ${tempVars[relativeDir]}"
+    tempVars+=([fileWithDir]="${FILE%.*}")
+    tempVars+=([fileEscaped]=$(printf '%q' "$FILE"))
+    tempVars+=([filenameEscaped]=$(printf '%q' "${tempVars[filename]}"))
 
-	debug "Destination: ${options[destination]}"
-	tempVars+=([outputDest]=$(printf '%q' "${options[destination]%/}"))
-	tempVars+=([relativeDest]="${tempVars[relativeDir]#/}")
-	#echo -e "${lightb} RelativeDest: ${tempVars[relativeDest]}"
-	tempVars+=([outputFile]="${tempVars[filename]}${tempVars[previewSuffix]}.${options[outputFormat]}")
-	if [ -n "${tempVars[relativeDest]}" ]; then
-		tempVars+=([output]="${tempVars[outputDest]}/${tempVars[relativeDest]}/${tempVars[outputFile]}")
-	else
-		tempVars+=([output]="${tempVars[outputDest]}/${tempVars[outputFile]}")
-	fi
-	tempVars+=([tempDirEscaped]=$(printf '%q' "${options[tempDir]%/}"))
-	tempVars+=([tempOutput]="${tempVars[tempDirEscaped]}/${options[tempName]}-$RANDOM.${options[outputFormat]}")
-	
-	tempVars+=([onSubtitleNumber]=0)
-	tempVars+=([onAudioNumber]=0)
-	
-	log "Processing ${tempVars[filenameWithExtention]}..."
-	echo "--------------------------------------------------------------------------------"
-	
-	# Check if output file already exists
-	if [ -e "${tempVars[output]}" ] && [ ! "${options[preview]}" -eq 1 ]; then
-		warn "${tempVars[output]} already exists. Skipping..."
-		continue
-	fi
-
-	# Get number of streamsi
-	tempVars+=([numStreams]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o '\[STREAM\]' | wc -l))
-	tempVars+=([numStreamsFromIndex]=$(expr ${tempVars[numStreams]} - 1))
-
-	# Get number of audio tracks
-	tempVars+=([numAudioTracks]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'codec_type=audio' | wc -l))
-	tempVars+=([audioTracks]=$(seq -s, $counter 1 ${tempVars[numAudioTracks]}))
-	tempVars+=([AudioCodecs]="")
-
-	# Get duration and size
-	eval $(ffprobe -loglevel quiet -show_format "$FILE" | grep -E 'duration|size')
-	tempVars+=([duration]="$duration")
-	unset duration
-	tempVars+=([size]=$(echo "$size / 1000000" | bc)) # Size in MB
-	unset size
-	tempVars+=([formatedDuration]=$(echo "scale=2; ${tempVars[duration]} / 60" | bc)) # Time in minutes
-	tempVars+=([startDate]=$(date)) # Time encoding of file began
-	#divisor=`echo "$duration / 60 * .7" | bc`
-	#echo $divisor
-	#factor=`echo "$size / $divisor" | bc`
-	#echo $factor
-	#quality=`echo "scale=2; $factor" | bc`
-	#echo $quality
-	tempVars+=([formatedStartDate]=$(date -d"${tempVars[startDate]}" +"%m/%d %r"))
-	verbose $green "File encoding started at $yellow${tempVars[formatedStartDate]}$NC"
-	verbose $green "Duration: ${tempVars[formatedDuration]} Minutes (${tempVars[duration]} seconds)"
-	verbose $green "Size: ${tempVars[size]} MB"
-
-	addAudioCodecToVar(){
-        if [ -z "${tempVars[audioCodecs]}" ]; then
-			tempVars+=([audioCodecs]="$1")
-		else
-			tempVars[audioCodecs]="${tempVars[audioCodecs]},$1"
-		fi
-	}
-
-	addAudioNameToVar() {
-		if [ -z "${tempVars[audioNames]}" ]; then
-            tempVars+=([audioNames]="$1")
-        else
-			temp=${tempVars[audioNames]}
-			unset tempVars[audioNames]
-            tempVars+=([audioNames]="$temp,$1")
-			unset temp
-        fi
-	}
-
-	addAudioCodec(){ # $1=format $2=bit_rate (flac only)
-		if [ $1 = "flac" ]; then
-            addAudioCodecToVar "flac$2"
-		elif [ $1 = "dts" ]; then
-			addAudioCodecToVar "copy:dts"
-		elif [ $1 = "dtshd" ]; then
-            addAudioCodecToVar "copy:dtshd"
-		elif [ $1 = "ac3" ]; then
-			addAudioCodecToVar "ac3"
-		elif [ $1 = "vorbis" ]; then
-			addAudioCodecToVar "vorbis"
-		elif [ $1 = "mp3" ]; then
-			if [ "${options[upconvert]}" = 0 ]; then
-				addAudioCodecToVar "fdk_haac"
-			else
-				addAudioCodecToVar "mp3"
-			fi
-		else
-			addAudioCodecToVar "copy"
-		fi
-	}
-	
-	declare -a subtitleNames
-	declare -a subtitleLanguages
-	vobSubtitlesTrackIds=()
-	tempVars+=([ffmpegStreamMap]="")
-	tempVars+=([vobSubtitleNumber]=0)
-
-	for i in $(seq 0 ${tempVars[numStreamsFromIndex]}); do
-	
-		eval $(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep -E "codec_name|codec_type|bits_per_raw_sample|width|height|avg_frame_rate")
-		#echo `[[$codec_type -eq "video"]]`
-		language=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:language" | sed -n -e 's/^.*language=//p')
-		title=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:title" | sed -n -e 's/^.*title=//p')
-		
-		if [ "$codec_type" = "video" ]; then
-			tempVars+=([sourceWidth]="$width")
-			tempVars+=([sourceHeight]="$height")
-			# Floor frame rate to get keyInt (Bluray compliant and saves timings and faster seek times but increases size)
-			tempVars+=([keyInt]=$(echo "scale=0; $avg_frame_rate" | bc))
-			if [ $codec_name = "h265" ] || [ $codec_name = "hevc" ]; then
-				if [ ${options[override]} = 0 ]; then
-					warn "Video is already encoded in h265. Skipping..."
-					continue 2
-				fi
-			fi
-			tempVars+=([ffmpegStreamMap]="-map 0:$i ")
-
-		elif [ "$codec_type" = "audio" ]; then
-			#echo -e "${green}$TITLE"
-			tempVars[onAudioNumber]=$((${tempVars[onAudioNumber]} + 1))
-				if [ ${tempVars[onAudioNumber]} = 1 ]; then
-					tempVars+=([defaultAudioLang]="$language")
-				fi
-				
-			addAudioNameToVar "$title"
-			addAudioCodec $codec_name $bits_per_raw_sample $language
-			tempVars+=([ffmpegStreamMap]="-map 0:$i ")
-
-		elif [ "$codec_type" = "subtitle" ]; then
-			subtitleLanguages+=("$language")
-			subtitleNames+=("$title")
-			tempVars[onSubtitleNumber]=$((${tempVars[onSubtitleNumber]} + 1))
-			debug "Subtitle #${tempVars[onSubtitleNumber]}"
-			debug "Language: $language     Default Audio: ${tempVars[defaultAudioLang]}    NativeLangCode: ${options[nativeLangCode]}"
-			if [ "$language" = "${options[nativeLangCode]}" ] && [[ ! "${tempVars[defaultAudioLang]}" =~ ${options[nativeLangCode]} ]]; then
-					if [ -n "${tempVars[defaultSubtitle]}" ]; then
-						verbose $yellow "Multiple potential default subtitles with language $language found. Using first potential subtitle."
-					else
-						verbose $green "Default audio language does not match native language and native language subtitle provided. Default subtitle set to native language."
-						tempVars+=([defaultSubtitle]="--subtitle-default=${tempVars[onSubtitleNumber]}")
-						tempVars+=([defaultSubtitleNum]=${tempVars[onSubtitleNumber]})
-					fi
-			fi
-			
-			# Discover all subs in vobsub(dvdsub) format
-			if [ $codec_name = "dvdsub" ]; then
-				tempVars[vobSubtitleNumber]=$((${tempVars[vobSubtitleNumber]} + 1))
-				vobSubtitlesTrackIds+=($i)
-				
-				#if [ "${options[preview]}" -ne 1 ]; then
-					tempVars+=([ffmpegStreamMap]="-map ${tempVars[vobSubtitleNumber]} ")
-				#fi
-				
-				if [ "${tempVars[defaultSubtitleNum]}" = "${tempVars[onSubtitleNumber]}" ]; then
-					if [ "${options[outputFormat]}" = "mkv" ]; then
-						if [ -z $(hash "mkvpropedit") ]; then
-							tempVars+=([setNewDefault]=${tempVars[defaultSubtitleNum]})
-						else
-							warn "mkvpropedit(mkvtoolnix-cli) is not installed. mkvpropedit(mkvtoolnix-cli) must be installed to set default subtitles! Skipped setting default subtitle."
-						fi
-					else
-						warn "Yikes! It looks like the default subtitle is a vobsub I can fix that if you convert to an mkv instead!"
-					fi
-				fi
-			else
-				tempVars+=([ffmpegStreamMap]="-map 0:$i ")
-			fi
-		fi
-		
-		unset language
-		unset title
-		unset codec_name
-		unset codec_type
-		unset bits_per_raw_sample
-		unset width
-		unset height
-		unset avg_frame_rate
-		
-	done
-
-	verbose $green "Resolution: ${tempVars[sourceWidth]}x${tempVars[sourceHeight]}"
-	verbose $green "Audio Codecs: ${tempVars[audioCodecs]}"
-	verbose $green "Audio Tracks: ${tempVars[audioNames]}"
-	
-	for i in "${!subtitleNames[@]}"; do
-		if [ -n "${subtitleNames[$i]}" ]; then
-			tempVars[ffmpegSubtitlesMap]="${tempVars[ffmpegSubtitlesMap]} -metadata:s:s:$i title=\"${subtitleNames[$i]}\""
-		else
-			ico3=${subtitleLanguages[$i]}
-			tempVars[ffmpegSubtitlesMap]="${tempVars[ffmpegSubtitlesMap]} -metadata:s:s:$i title=\"${ICO3TONAME[$ico3]}\""
-			subtitleNames[$i]=${ICO3TONAME[$ico3]}
-		fi
-	done
-	
-	subtitleOutput=$(printf ",%s " "${subtitleNames[@]}")
-	verbose $green "Subtitle Tracks: ${subtitleOutput:1}"
-	unset subtitleOutput
-	
-	unset subtitleLanguages
-	unset subtitleNames
-
-	if [ ! -z "${tempVars[audioNames]}" ]; then
-		tempVars[audioNames]="-A\"${tempVars[audioNames]}\""
-	else
-		tempVars[audioNames]=""
-	fi
-
-	# Get number of subtitle tracks
-	tempVars+=([numSubtitleTracks]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'codec_type=subtitle' | wc -l))
-	if [ "${tempVars[numSubtitleTracks]}" -gt 0 ]; then
-		tempVars+=([subtitleTracks]="--subtitle `seq -s, $counter 1 ${tempVars[numSubtitleTracks]}`")
-	else
-		tempVars+=([subtitleTracks]="")
-	fi
-
-	verbose $green "Subtitles: ${tempVars[subtitleTracks]}"
-	
-	# Find out if bit depth 10 or 8 should be used
-	tempVars+=([bitDepth10]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'profile=High 10'))
-
-	if [ -n "${tempVars[bitDepth10]}" ]; then
-		tempVars+=([profile]="main10")
-		tempVars+=([handbrake]=${options[handbrakecli10bit]})
-	else
-		tempVars+=([profile]="main")
-		tempVars+=([handbrake]=${options[handbrakecli]})
-	fi
-	
-	# Check if handbrake is installed
-	hash ${tempVars[handbrake]} 2>/dev/null || { error "${tempVars[handbrake]} is not installed. ${tempVars[handbrake]} must be installed!"; exit 5; }
-	
-	if [ ${options[accurateTimestamps]} -eq 1 ]; then
-		if [ -n "${options[extraOptions]}" ]; then
-			tempVars+=([extraOptions]="-x ${options[extraOptions]}:keyint=${tempVars[keyInt]}")
-		else
-			tempVars+=([extraOptions]="-x keyint=${tempVars[keyInt]}")
-		fi
-	elif [ -n "${options[extraOptions]}" ]; then
-		tempVars+=([extraOptions]="-x ${options[extraOptions]}")
-	fi
-
-	if [ ${options[preview]} -eq 1 ]; then tempVars+=([startStop]="--start-at duration:$(echo "scale=0; ${tempVars[duration]} / 2" | bc) --stop-at duration:${options[previewLength]}"); fi
-
-	verbose $green "Encoding Profile: ${tempVars[profile]}"
-	
-	if [ ${options[smart]} -eq 1 ]; then
-		# Make a copy of stdout
-		exec 5>&1
-		
-		# Get ssim rating
-		SSIM=$(eval "${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 25 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-tune=ssim --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} --start-at duration:$(echo "scale=0; ${tempVars[duration]} / 2" | bc) --stop-at duration:30 --modulus 2 -m -x aq-strength=1.0:${options[extraOptions]} --verbose=0 2>&1" | tee >(cat - >&5) | grep -E 'x265 \[info\]: global :.*SSIM Mean: [0-9]\.([0-9]{6})')
-		/bin/rm -f ${tempVars[tempOutput]}
-		tempVars+=([ssim]==$(echo "$SSIM" | sed -r "s/.*([0-9]{6}).*/\1/"))
-		unset SSIM
-		tempVars[output]="${tempVars[output]}.${tempVars[ssim]}"
-	fi
-	
-	#for i in ${19...25}; do
-	#	echo "hi!"
-	#done
-
-	#tempVars+=([query]="${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
-	tempVars+=([query]="${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
-	
-	handbrakeFile "${tempVars[query]}"
-	
-	tempVars+=([newDuration]=$(ffprobe -loglevel quiet -show_format "${tempVars[tempOutput]}" | grep 'duration' | sed 's/.*duration=\(.*\).*/\1/'))
-	if [ "${tempVars[newDuration]}" = "N/A" ] || [ ! -n "${tempVars[newDuration]}" ]; then
-		tempVars[newDuration]=0
-	fi
-
-	tempVars+=([newDurationMax]=$(echo "${tempVars[duration]} + ${options[timeDiffLimit]}" | bc))
-	tempVars+=([newDurationMin]=$(echo "${tempVars[duration]} - ${options[timeDiffLimit]}" | bc))
-	tempVars+=([passMax]=$(echo "${tempVars[newDuration]} < ${tempVars[newDurationMax]}" | bc))
-	tempVars+=([passMin]=$(echo "${tempVars[newDuration]} > ${tempVars[newDurationMin]}" | bc))
-	verbose $green "Original Duration: ${lightb}${tempVars[duration]}$NC New Duration: ${lightb}${tempVars[newDuration]}$NC"
-	
-	if [ -n "${tempVars[duration]}" ] && [ 1 -eq "${tempVars[passMax]}" ] && [ 1 -eq "${tempVars[passMin]}" ] && [ "${options[preview]}" -ne 1 ]; then
-		/bin/mkdir -p "${tempVars[output]%/*}"
-		if [ -n "${tempVars[ffmpegSubtitlesMap]}" ]; then
-			upconvertSubtitles "${tempVars[tempOutput]}"
-			mapSubtitles
-			/bin/rm -f "${tempVars[tempOutput]}"
-		else
-			/bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
-		fi
-		log "${tempVars[filename]} encoded successfully."
-		
-	elif [ "${options[preview]}" -eq 1 ] && [ $(echo "${tempVars[newDuration]}" | awk '{printf("%d\n",$0+=$0<0?0:0.9999999999999)}') -ne 0 ]; then
-		/bin/mkdir -p "${tempVars[output]%/*}"
-		if [ ${tempVars[onSubtitleNumber]} -gt 0 ]; then
-			upconvertSubtitles "${tempVars[tempOutput]}"
-			mapSubtitles
-			/bin/rm -f "${tempVars[tempOutput]}"
-		else
-			/bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
-		fi
-		log "Preview output in: ${tempVars[output]}"
-		
-	else
-		filesNotAcceptable=$(($filesNotAcceptable + 1))
-        error "Ut oh. Duration of ${tempVars[filename]} is not within acceptable limits of the original file."
-		error "Bad file stored at ${tempVars[tempOutput]}."
+    if [ "${options[preview]}" -eq 1 ]; then
+        tempVars+=([previewSuffix]="-preview")
     fi
 
-	if [ -n "$DELETE" ]; then
-		/bin/rm -f "$FILE"
-	fi
-	
-	tempVars+=([endDate]=$(date)) # Time encoding of file ended
-	tempVars+=([formatedEndDate]=$(date -d"${tempVars[endDate]}" +"%m/%d %r"))
-	verbose $green "File encoding ended at $yellow${tempVars[formatedEndDate]}$NC"
-  	tempVars+=([startSeconds]=$(date -d"${tempVars[startDate]}" +%s))
-  	tempVars+=([endSeconds]=$(date -d"${tempVars[endDate]}" +%s))
-  	tempVars+=([timeDifference]=$((${tempVars[endSeconds]}-${tempVars[startSeconds]})))
-	
-	verbose $green "File encoding time: $yellow$((${tempVars[timeDifference]} / 60))$NC minute(s) and $yellow$((${tempVars[timeDifference]} % 60))$NC second(s)"
-	
-	# Clear stdin because ffmpeg leaves input that will corrupt next command
-	#http://superuser.com/questions/276531/clear-stdin-before-reading
-	#read -t 1 -n 10000 discard 
-	
-	unset vobSubtitlesTrackIds
+    debug "Destination: ${options[destination]}"
+    tempVars+=([outputDest]=${options[destination]%/})
+    tempVars+=([relativeDest]="${tempVars[relativeDir]#/}")
+    #echo -e "${lightb} RelativeDest: ${tempVars[relativeDest]}"
+    tempVars+=([outputFile]="${tempVars[filename]}${tempVars[previewSuffix]}.${options[outputFormat]}")
+    if [ -n "${tempVars[relativeDest]}" ]; then
+        tempVars+=([output]="${tempVars[outputDest]}/${tempVars[relativeDest]}/${tempVars[outputFile]}")
+    else
+        tempVars+=([output]="${tempVars[outputDest]}/${tempVars[outputFile]}")
+    fi
+    tempVars+=([tempDirEscaped]=$(printf '%q' "${options[tempDir]%/}"))
+    tempVars+=([tempOutput]="${tempVars[tempDirEscaped]}/${options[tempName]}-$RANDOM.${options[outputFormat]}")
+
+    tempVars+=([onSubtitleNumber]=0)
+    tempVars+=([onAudioNumber]=0)
+
+    log "Processing ${tempVars[filenameWithExtention]}..."
+    echo "--------------------------------------------------------------------------------"
+
+    # Check if output file already exists
+    if [ -e "${tempVars[output]}" ] && [ ! "${options[preview]}" -eq 1 ]; then
+        warn "${tempVars[output]} already exists. Skipping..."
+        continue
+    fi
+
+    # Get number of streams
+    tempVars+=([numStreams]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o '\[STREAM\]' | wc -l))
+    tempVars+=([numStreamsFromIndex]=$(expr ${tempVars[numStreams]} - 1))
+
+    # Get number of audio tracks
+    tempVars+=([numAudioTracks]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'codec_type=audio' | wc -l))
+    tempVars+=([audioTracks]=$(seq -s, $counter 1 ${tempVars[numAudioTracks]}))
+    tempVars+=([AudioCodecs]="")
+
+    # Get duration and size
+    eval $(ffprobe -loglevel quiet -show_format "$FILE" | grep -E 'duration|size')
+    tempVars+=([duration]="$duration")
+    unset duration
+    tempVars+=([size]=$(echo "$size / 1000000" | bc)) # Size in MB
+    unset size
+    tempVars+=([formatedDuration]=$(echo "scale=2; ${tempVars[duration]} / 60" | bc)) # Time in minutes
+    tempVars+=([startDate]=$(date)) # Time encoding of file began
+    #divisor=`echo "$duration / 60 * .7" | bc`
+    #echo $divisor
+    #factor=`echo "$size / $divisor" | bc`
+    #echo $factor
+    #quality=`echo "scale=2; $factor" | bc`
+    #echo $quality
+    tempVars+=([formatedStartDate]=$(date -d"${tempVars[startDate]}" +"%m/%d %r"))
+    verbose $green "File encoding started at $yellow${tempVars[formatedStartDate]}$NC"
+    verbose $green "Duration: ${tempVars[formatedDuration]} Minutes (${tempVars[duration]} seconds)"
+    verbose $green "Size: ${tempVars[size]} MB"
+
+    addAudioCodecToVar(){
+        if [ -z "${tempVars[audioCodecs]}" ]; then
+            tempVars+=([audioCodecs]="$1")
+        else
+            tempVars[audioCodecs]="${tempVars[audioCodecs]},$1"
+        fi
+    }
+
+    addAudioNameToVar() {
+        if [ -z "${tempVars[audioNames]}" ]; then
+            tempVars+=([audioNames]="$1")
+        else
+            temp=${tempVars[audioNames]}
+            unset tempVars[audioNames]
+            tempVars+=([audioNames]="$temp,$1")
+            unset temp
+        fi
+    }
+
+    addAudioCodec(){ # $1=format $2=bit_rate (flac only)
+        if [ $1 = "flac" ]; then
+            addAudioCodecToVar "flac$2"
+        elif [ $1 = "dts" ]; then
+            addAudioCodecToVar "copy:dts"
+        elif [ $1 = "dtshd" ]; then
+            addAudioCodecToVar "copy:dtshd"
+        elif [ $1 = "ac3" ]; then
+            addAudioCodecToVar "ac3"
+        elif [ $1 = "vorbis" ]; then
+            addAudioCodecToVar "vorbis"
+        elif [ $1 = "mp3" ]; then
+            if [ "${options[upconvert]}" = 0 ]; then
+                addAudioCodecToVar "mp3"
+            else
+                addAudioCodecToVar "fdk_haac"
+            fi
+        else
+            addAudioCodecToVar "copy"
+        fi
+    }
+
+    declare -a subtitleNames
+    declare -a subtitleLanguages
+    vobSubtitlesTrackIds=()
+    tempVars+=([vobSubtitleNumber]=0)
+
+    for i in $(seq 0 ${tempVars[numStreamsFromIndex]}); do
+
+        eval $(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep -E "codec_name|codec_type|bits_per_raw_sample|width|height|avg_frame_rate")
+        #echo `[[$codec_type -eq "video"]]`
+        #debug "$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE")"
+        language=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:language" | sed -n -e 's/^.*language=//p')
+        title=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:title" | sed -n -e 's/^.*title=//p')
+        if [ -z "$language" ]; then
+            language="unk"
+        fi
+        debug "Stream Index: $i    Title: $title    Language: $language    Codec: $codec_type"
+
+
+        if [ "$codec_type" = "video" ] && [ -n "${tempVars[videoSet]}" ]; then
+            warn "Multiple videos within single container detected. Handbrake only supports the first video within a container, so the rest will be skipped."
+        elif [ "$codec_type" = "video" ]; then
+            tempVars[videoSet]=1
+            tempVars+=([sourceWidth]="$width")
+            tempVars+=([sourceHeight]="$height")
+
+            # Floor frame rate to get keyInt (Bluray compliant and saves timings and faster seek times but increases size)
+            tempVars+=([keyInt]=$(echo "scale=0; $avg_frame_rate" | bc))
+            tempVars+=([frameRate]=$avg_frame_rate)
+            if [ $codec_name = "h265" ] || [ $codec_name = "hevc" ]; then
+                if [ ${options[override]} = 0 ]; then
+                    warn "Video is already encoded in h265. Skipping..."
+                    continue 2
+                fi
+            fi
+            tempVars+=([ffmpegVideoStreamMap]="-map 0:$i ")
+
+        elif [ "$codec_type" = "audio" ]; then
+            #echo -e "${green}$TITLE"
+            tempVars[onAudioNumber]=$((${tempVars[onAudioNumber]} + 1))
+            if [ ${tempVars[onAudioNumber]} = 1 ]; then
+                tempVars+=([defaultAudioLang]="$language")
+            fi
+
+            addAudioNameToVar "$title"
+            addAudioCodec $codec_name $bits_per_raw_sample $language
+            tempVars+=([ffmpegAudioStreamMap]="-map 0:$i ")
+
+        elif [ "$codec_type" = "subtitle" ]; then
+            subtitleLanguages+=("$language")
+            subtitleNames+=("$title")
+            tempVars[onSubtitleNumber]=$((${tempVars[onSubtitleNumber]} + 1))
+            debug "Subtitle #${tempVars[onSubtitleNumber]}"
+            debug "Language: $language     Default Audio: ${tempVars[defaultAudioLang]}    NativeLangCode: ${options[nativeLangCode]}"
+            if [ "$language" = "${options[nativeLangCode]}" ] || [ "$language" = "unk" ] || [ "$language" = "und" ]; then
+                if [[ ! "${tempVars[defaultAudioLang]}" =~ ${options[nativeLangCode]} ]]; then
+                    if [ -n "${tempVars[defaultSubtitle]}" ]; then
+                        verbose $yellow "Multiple potential default subtitles with language $language found. Using first potential subtitle."
+                    else
+                        verbose $green "Default audio language does not match native language and native language subtitle provided. Default subtitle set to native language or first unknown language subtitle."
+                        tempVars+=([defaultSubtitle]="--subtitle-default=${tempVars[onSubtitleNumber]}")
+                        tempVars+=([defaultSubtitleNum]=${tempVars[onSubtitleNumber]})
+                    fi
+                fi
+            fi
+
+            # Discover all subs in vobsub(dvdsub) format
+            if [ $codec_name = "dvdsub" ]; then
+                tempVars[vobSubtitleNumber]=$((${tempVars[vobSubtitleNumber]} + 1))
+                vobSubtitlesTrackIds+=($i)
+
+                #if [ "${options[preview]}" -ne 1 ]; then
+                tempVars+=([ffmpegSubititleStreamMap]="-map ${tempVars[vobSubtitleNumber]} ")
+                #fi
+
+                if [ "${tempVars[defaultSubtitleNum]}" = "${tempVars[onSubtitleNumber]}" ]; then
+                    if [ "${options[outputFormat]}" = "mkv" ]; then
+                        if [ -z $(hash "mkvpropedit") ]; then
+                            tempVars+=([setNewDefault]=${tempVars[defaultSubtitleNum]})
+                        else
+                            warn "mkvpropedit(mkvtoolnix-cli) is not installed. mkvpropedit(mkvtoolnix-cli) must be installed to set default subtitles! Skipped setting default subtitle."
+                        fi
+                    else
+                        warn "Yikes! It looks like the default subtitle is a vobsub I can fix that if you convert to an mkv instead!"
+                    fi
+                fi
+            else
+                tempVars+=([ffmpegSubititleStreamMap]="-map 0:$i ")
+            fi
+        else
+            # Other codecs are just copied
+            tempVars+=([ffmpegOtherStreamMap]="-map 0:$i ")
+        fi
+
+        unset language
+        unset title
+        unset codec_name
+        unset codec_type
+        unset bits_per_raw_sample
+        unset width
+        unset height
+        unset avg_frame_rate
+
+    done
+
+    verbose $green "Resolution: ${tempVars[sourceWidth]}x${tempVars[sourceHeight]}"
+    verbose $green "Audio Codecs: ${tempVars[audioCodecs]}"
+    verbose $green "Audio Tracks: ${tempVars[audioNames]}"
+
+    for i in "${!subtitleNames[@]}"; do
+        if [ -n "${subtitleNames[$i]}" ]; then
+            debug "Subtitle name was not empty."
+            tempVars[ffmpegSubtitlesMap]="${tempVars[ffmpegSubtitlesMap]} -metadata:s:s:$i title=\"${subtitleNames[$i]}\""
+        else
+            ico3=${subtitleLanguages[$i]}
+            tempVars[ffmpegSubtitlesMap]="${tempVars[ffmpegSubtitlesMap]} -metadata:s:s:$i title=\"${ICO3TONAME[$ico3]}\""
+            subtitleNames[$i]=${ICO3TONAME[$ico3]}
+            warn "Subtitle title was empty. Subtitle title changed to ${subtitleNames[$i]}."
+        fi
+    done
+
+    subtitleOutput=$(printf ",%s " "${subtitleNames[@]}")
+    verbose $green "Subtitle Tracks: ${subtitleOutput:1}"
+    unset subtitleOutput
+
+    unset subtitleLanguages
+    unset subtitleNames
+
+    if [ ! -z "${tempVars[audioNames]}" ]; then
+        tempVars[audioNames]="-A\"${tempVars[audioNames]}\""
+    else
+        tempVars[audioNames]=""
+    fi
+
+    # Get number of subtitle tracks
+    tempVars+=([numSubtitleTracks]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'codec_type=subtitle' | wc -l))
+    if [ "${tempVars[numSubtitleTracks]}" -gt 0 ]; then
+        tempVars+=([subtitleTracks]="--subtitle `seq -s, $counter 1 ${tempVars[numSubtitleTracks]}`")
+    else
+        tempVars+=([subtitleTracks]="")
+    fi
+
+    verbose $green "Subtitles: ${tempVars[subtitleTracks]}"
+
+    # Find out if bit depth 10 or 8 should be used
+    tempVars+=([bitDepth10]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'profile=High 10'))
+
+    if [ -n "${tempVars[bitDepth10]}" ]; then
+        tempVars+=([profile]="main10")
+        tempVars+=([handbrake]=${options[handbrakecli10bit]})
+    else
+        tempVars+=([profile]="main")
+        tempVars+=([handbrake]=${options[handbrakecli]})
+    fi
+
+    # Check if handbrake is installed
+    hash ${tempVars[handbrake]} 2>/dev/null || { error "${tempVars[handbrake]} is not installed. ${tempVars[handbrake]} must be installed!"; exit 5; }
+
+    if [ ${options[accurateTimestamps]} -eq 1 ]; then
+        if [ -n "${options[extraOptions]}" ]; then
+            tempVars+=([extraOptions]="-x ${options[extraOptions]}:keyint=${tempVars[keyInt]}")
+        else
+            tempVars+=([extraOptions]="-x keyint=${tempVars[keyInt]}")
+        fi
+    elif [ -n "${options[extraOptions]}" ]; then
+        tempVars+=([extraOptions]="-x ${options[extraOptions]}")
+    fi
+
+    tempVars[halfDuration]=$(echo "scale=6; ${tempVars[duration]} / 2" | bc)
+    if [ $(echo "scale=6; ${options[previewLength]} > ${tempVars[halfDuration]}" | bc) -eq 1 ]; then
+        tempVars[previewLength]="${tempVars[halfDuration]}"
+        warn "Preview length can not be greater than half of the video's duration. Preview length temporarily set to ${tempVars[previewLength]}."
+    else
+        tempVars[previewLength]=${options[previewLength]}
+    fi
+
+    if [ ${options[preview]} -eq 1 ]; then tempVars+=([startStop]="--start-at duration:$(echo "scale=0; ${tempVars[duration]} / 2" | bc) --stop-at duration:${tempVars[previewLength]}"); fi
+
+    verbose $green "Encoding Profile: ${tempVars[profile]}"
+
+    if [ ${options[smart]} -eq 1 ]; then
+        # Make a copy of stdout
+        exec 5>&1
+
+        # Get ssim rating
+        SSIM=$(eval "${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 25 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-tune=ssim --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} --start-at duration:$(echo "scale=0; ${tempVars[duration]} / 2" | bc) --stop-at duration:30 --modulus 2 -m -x aq-strength=1.0:${options[extraOptions]} --verbose=0 2>&1" | tee >(cat - >&5) | grep -E 'x265 \[info\]: global :.*SSIM Mean: [0-9]\.([0-9]{6})')
+        /bin/rm -f ${tempVars[tempOutput]}
+        tempVars+=([ssim]==$(echo "$SSIM" | sed -r "s/.*([0-9]{6}).*/\1/"))
+        unset SSIM
+        tempVars[output]="${tempVars[output]}.${tempVars[ssim]}"
+    fi
+
+    #for i in ${19...25}; do
+    #	echo "hi!"
+    #done
+
+    /bin/mkdir -p "${tempVars[output]%/*}"
+
+    #tempVars+=([query]="${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
+    tempVars+=([query]="${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -6 dpl2 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
+    handbrakeFile "${tempVars[query]}"
+
+    tempVars+=([newDuration]=$(ffprobe -loglevel quiet -show_format "${tempVars[tempOutput]}" | grep 'duration' | sed 's/.*duration=\(.*\).*/\1/'))
+    if [ "${tempVars[newDuration]}" = "N/A" ] || [ ! -n "${tempVars[newDuration]}" ]; then
+        tempVars[newDuration]=0
+    fi
+
+    tempVars+=([newDurationMax]=$(echo "${tempVars[duration]} + ${options[timeDiffLimit]}" | bc))
+    tempVars+=([newDurationMin]=$(echo "${tempVars[duration]} - ${options[timeDiffLimit]}" | bc))
+    tempVars+=([passMax]=$(echo "${tempVars[newDuration]} < ${tempVars[newDurationMax]}" | bc))
+    tempVars+=([passMin]=$(echo "${tempVars[newDuration]} > ${tempVars[newDurationMin]}" | bc))
+    verbose $green "Original Duration: ${lightb}${tempVars[duration]}$NC New Duration: ${lightb}${tempVars[newDuration]}$NC"
+
+    if [ -n "${tempVars[duration]}" ] && [ 1 -eq "${tempVars[passMax]}" ] && [ 1 -eq "${tempVars[passMin]}" ] && [ "${options[preview]}" -ne 1 ]; then
+        if [ -n "${tempVars[ffmpegSubtitlesMap]}" ]; then
+            upconvertSubtitles "${tempVars[tempOutput]}"
+            mapSubtitles
+            /bin/rm -f "${tempVars[tempOutput]}"
+        else
+            debug "Moving ${tempVars[tempOutput]} to ${tempVars[output]}"
+            /bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+        fi
+        log "${tempVars[filename]} encoded successfully."
+
+    elif [ "${options[preview]}" -eq 1 ] && [ $(echo "${tempVars[newDuration]}" | awk '{printf("%d\n",$0+=$0<0?0:0.9999999999999)}') -ne 0 ]; then
+        /bin/mkdir -p "${tempVars[output]%/*}"
+        if [ ${tempVars[onSubtitleNumber]} -gt 0 ]; then
+            upconvertSubtitles "${tempVars[tempOutput]}"
+            mapSubtitles
+            /bin/rm -f "${tempVars[tempOutput]}"
+        else
+            /bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+        fi
+        log "Preview output in: ${tempVars[output]}"
+
+    else
+        badfile=1
+        filesNotAcceptable=$(($filesNotAcceptable + 1))
+        error "Ut oh. Duration of ${tempVars[filename]} is not within acceptable limits of the original file."
+        error "Bad file stored at ${tempVars[tempOutput]}."
+
+    fi
+
+    if [ -n "$DELETE" ]; then
+        /bin/rm -f "$FILE"
+    fi
+
+    tempVars+=([endDate]=$(date)) # Time encoding of file ended
+    tempVars+=([formatedEndDate]=$(date -d"${tempVars[endDate]}" +"%m/%d %r"))
+    verbose $green "File encoding ended at $yellow${tempVars[formatedEndDate]}$NC"
+    tempVars+=([startSeconds]=$(date -d"${tempVars[startDate]}" +%s))
+    tempVars+=([endSeconds]=$(date -d"${tempVars[endDate]}" +%s))
+    tempVars+=([timeDifference]=$((${tempVars[endSeconds]}-${tempVars[startSeconds]})))
+
+    verbose $green "File encoding time: $yellow$((${tempVars[timeDifference]} / 60))$NC minute(s) and $yellow$((${tempVars[timeDifference]} % 60))$NC second(s)"
+
+    if [ -z "$badfile" ]; then
+        tempVars[encodedFileSize]=$(stat --printf="%s" "${tempVars[output]}")
+        tempVars[encodedFileSize]=$(echo "scale=0; ${tempVars[encodedFileSize]}/1000000" | bc)
+        tempVars[sizeChange]=$(echo "scale=2; ${tempVars[encodedFileSize]}/${tempVars[fileSize]} * 100" | bc)
+        verbose $green "File size:   Old: $yellow${tempVars[fileSize]}${NC}MB    New: $yellow${tempVars[encodedFileSize]}${NC}MB ($yellow${tempVars[sizeChange]}${NC}%)"
+
+        if [ "${options[stats]}" = 1 ]; then
+            #tempVars[statsFile]=$(date -d"${tempVars[scriptStart]}" +"%m-%d-%H:%M:%S")
+            verbose $green "Writing stats to ${tempVars[outputDest]}/h265ize.stats"
+            # $(echo "-q ${options[quality]} --vfr --gain 0 --audio-fallback ac3 -6 dpl2 --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]}" >> "${tempVars[outputDest]}/h265ize.stats")
+            $(echo "${tempVars[formatedEndDate]},${tempVars[filenameWithExtention]},${tempVars[fileSize]}MB,${tempVars[encodedFileSize]}MB,${tempVars[sizeChange]}%" >> "${tempVars[outputDest]}/h265ize.stats")
+        fi
+    fi
+
+    # Clear stdin because ffmpeg leaves input that will corrupt next command
+    #http://superuser.com/questions/276531/clear-stdin-before-reading
+    #read -t 1 -n 10000 discard
+
+    unset vobSubtitlesTrackIds
+    unset badfile
 
 done <<< "$FILES"
 endTime=$(date +"%b %d %r") # Time after all file have been encoded
 verbose $green "Folder processing ended on $yellow$endTime$NC"
 if [ $filesNotAcceptable != 0 ]; then
-	error "$filesNotAcceptable files had encoding errors/were encoded incorrectly, and therefore were not placed in the destination."
+    error "$filesNotAcceptable files had encoding errors/were encoded incorrectly, and therefore were not placed in the destination."
 fi
 log "Completed!"
+
+# Terminal, if you would ring please
+echo -e "\a"
