@@ -2,6 +2,8 @@
 h265ize is a fire and forget weapon. A bash script utilizing handbrake to encode large quantities of videos with the hevc codec.
 For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265izer/ "Ayrton Sparling").
 
+If you have any questions or the script isn't working for you, feel free to open an issue.
+
 ## Features
 - Batch file processing (can process a whole folder)
 - Automatically detects video files (only processes video files found within a folder)
@@ -42,7 +44,7 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 ```
 
 ## Usage
-./h265izer [-h(help)] [-d &lt;string&gt;] [-q &lt;0|51&gt;] [-m &lt;string&gt;] [-n &lt;string&gt;{3}] [-t &lt;string&gt;] [-f &lt;string&gt;{3}] [-g &lt;string&gt;] [-l &lt;integer&gt;] [-a] [-o] [-p] [-u] [-v] &lt;file|directory&gt;
+`./h265izer [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] <file|directory>`
 ### Options
 >  -a :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
 
@@ -87,8 +89,21 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 | animeHigh | Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these settings create high latency encodes |
 
 #### Examples
-* ./h265izer -v big_buck_bunny_1080p_h264.mov
-* ./h265izer -v -d /home -q 25 -g /tmp big_buck_bunny_folder
+* `./h265izer -v big_buck_bunny_1080p_h264.mov`
+* `./h265izer -v -d /home -q 25 -g /tmp big_buck_bunny_folder`
+
+## Stats file
+The stats file is located at the destination of the finished encoding under the name `h265ize.stats`. The file is composed of several lines. Each line is in the format
+
+`
+[Finish Encoding Date],[Filename],[Original Size in Megabytes],[Encoded size in Megabytes],[Compression Ratio]
+`
+
+For exmaple:
+
+`
+08/13 02:46:03 PM, [deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.00%
+`
 
 ## Creating 10bit encodes
 In order to encode 10bit encodes you must build handbrake yourself with a 10bit x265 build. In order to do this, follow these steps
