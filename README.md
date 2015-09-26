@@ -87,6 +87,7 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 |:---:|:---|
 | finalCut | Uses the slow preset and allows QP to shift between 19 and 23 |
 | animeHigh | Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these settings create high latency encodes |
+| animeLow | Same as animeHigh but lowers file size even further for low quality encodes |
 
 #### Examples
 * `./h265izer -v big_buck_bunny_1080p_h264.mov`
