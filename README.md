@@ -25,7 +25,7 @@ If you have any questions or the script isn't working for you, feel free to open
 
 ### Dependencies
 - [HandBrake](https://handbrake.fr/) - Does all the encoding, absolutely necessary to do use the script at all.
-- [FFmpeg](https://www.ffmpeg.org/) - Used for things like detecting timing, audio/video/subtitle tracks, languages, and many, many other things. Also absolutely necessary.
+- [FFmpeg](https://www.ffmpeg.org/) - Used for things like detecting timing, audio/video/subtitle tracks, languages, and many, many other things. Also necessary.
 - [mkvtoolnix](https://www.bunkus.org/videotools/mkvtoolnix/) - Used for upconverting subs in MKVs, not necessary.
 - [vobsub2srt](https://github.com/ruediger/VobSub2SRT) - Used for upconverting subs, not necessary.
 
@@ -44,43 +44,49 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 ```
 
 ## Usage
-`./h265izer [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] <file|directory>`
+`./h265izer [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] [--debug] [--aspreset <preset>] [--depth <integer>] [--video-bitrate <integer>] [--delete] <file|directory>`
 ### Options
->  -a :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
+> -a :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
 
->  -d :(NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
+> -d :(NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
 
->  -f :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
+> -f :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
 
->  -g :(NO TRAILING SLASH) Directory where new unfinished file is stored
+> -g :(NO TRAILING SLASH) Directory where new unfinished file is stored
 
->  -l :Seconds to be encoded in preview mode; default: 30
+> -l :Seconds to be encoded in preview mode; default: 30
 
->  -m :x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
+> -m :x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
 
->  -n :Your native language; Examples: eng, fre, spa, dut; default: eng
+> -n :Your native language; Examples: eng, fre, spa, dut; default: eng
 
->  -o :Override mode; Allows conversion of videos that are already encoded by the hevc codec
+> -o :Override mode; Allows conversion of videos that are already encoded by the hevc codec
 
->  -p :Preview mode; Only processes the first ${defaults[previewLength]} seconds
+> -p :Preview mode; Only processes the first ${defaults[previewLength]} seconds
 
->  -q :0-51; default: 19
+> -q :Sets the qp quality target; default: 19
 
->  -t :Temporary name of the new unfinished file
+> -t :Temporary name of the new unfinished file
 
->  -u :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
+> -u :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
 
->  -v :Verbose mode; Display extra output
+> -v :Verbose mode; Display extra output
 
->  -x :Extra options; Experimental, can lead to glitchy encodes; Not Recommended
+> -x :Extra x265 options
 
->  -h :Help; Shows help page
+> -h :Help; Shows this help page
 
->  --debug :Debug mode; Print extra debugging information
+> --delete : Delete source after encoding is complete; STRONGLY NOT RECOMMENED
 
->  --aspreset :My personal presets; Possible values are listed [below](#aspresets); I'll be adding more as time goes on
+> --depth :How deap the search for files should go in subdirectories; default: 2
 
->  --help :Help; Shows help page
+> --debug :Debug mode; Print extra debugging information
+
+> --aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
+
+> --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
+
+> --help :Help; Shows this help page
 
 #### Aspresets <a name="aspresets"></a>
 | Preset | Description |

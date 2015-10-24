@@ -4,7 +4,7 @@
 
 declare -A defaults
 defaults+=([destination]="$HOME/h265") # (NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
-defaults+=([quality]=19) # 0-51; default: 19
+defaults+=([quality]=19) # 0-51; Sets the qp quality target; default: 19
 defaults+=([vbr]=0) # Sets the video bitrate, set to 0 to use qp instead of a target bitrate; default: 0
 defaults+=([preset]="fast") # x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
 defaults+=([nativeLangCode]="eng") # Examples: eng, fre, spa, dut, et cetera; default: eng
@@ -57,7 +57,7 @@ commandDesciptions="
 -n :Your native language; Examples: eng, fre, spa, dut; default: eng
 -o :Override mode; Allows conversion of videos that are already encoded by the hevc codec
 -p :Preview mode; Only processes the first ${defaults[previewLength]} seconds
--q :0-51; default: 19
+-q :0-51; Sets the qp quality target; default: 19
 -t :Temporary name of the new unfinished file
 -u :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
 -v :Verbose mode; Display extra output
