@@ -1,4 +1,4 @@
-#!/bin/bash
+#!bash
 
 # All of these preset do not need to be chanded, the script will work (in almost all cases) with all defaults
 
@@ -259,7 +259,7 @@ if [[ ! -d "${options[destination]}" ]]; then
     while true; do
         read yn
         case $yn in
-            [Yy]* ) /bin/mkdir -p "${options[destination]}"; break;;
+            [Yy]* ) mkdir -p "${options[destination]}"; break;;
             [Nn]* ) exit 2;;
             * ) exit 2;;
         esac
@@ -271,7 +271,7 @@ if [[ ! -d "${options[tempDir]}" ]]; then
     while true; do
         read yn
         case $yn in
-            [Yy]* ) /bin/mkdir -p "${options[tempDir]}"; break;;
+            [Yy]* ) mkdir -p "${options[tempDir]}"; break;;
             [Nn]* ) exit 2;;
             * ) exit 2;;
         esac
@@ -315,19 +315,19 @@ cleanup() {
     warn "$package did not end cleanly. Deleting temp file and extra files."
     if [ ${options[debug]} -eq 1 ]; then
         debug "Temporary output at ${tempVars[tempOutput]} will not be deleted."
-        /bin/rm -f "${tempVars[tempOutput]}"
+        rm -f "${tempVars[tempOutput]}"
     fi
-    /bin/rm -f ${tempVars[cleanupFiles]}
+    rm -f ${tempVars[cleanupFiles]}
 
     exit 4
 }
 mapSubtitles() {
     if [ ${options[parallel]} = 0 ]; then
-        tempVars+=([ffmpegQuery]="/bin/ffmpeg -loglevel error -hide_banner -i \"${tempVars[tempOutput]}\" ${tempVars[additionalInputs]} -c copy -y ${tempVars[ffmpegVideoStreamMap]} ${tempVars[ffmpegAudioStreamMap]} ${tempVars[ffmpegSubititleStreamMap]} ${tempVars[ffmpegOtherStreamMap]} ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null &")
+        tempVars+=([ffmpegQuery]="ffmpeg -loglevel error -hide_banner -i \"${tempVars[tempOutput]}\" ${tempVars[additionalInputs]} -c copy -y ${tempVars[ffmpegVideoStreamMap]} ${tempVars[ffmpegAudioStreamMap]} ${tempVars[ffmpegSubititleStreamMap]} ${tempVars[ffmpegOtherStreamMap]} ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null &")
         log "Setting subtitle names..."
     else
         # Mapping after a parallel merge
-        tempVars+=([ffmpegQuery]="/bin/ffmpeg -loglevel error -hide_banner ${tempVars[parallelPreviewMergeTiming]} -i ${tempVars[fileEscaped]} -i \"${tempVars[tempOutput]}\" -async 1000 -c copy ${tempVars[audio]} -y -map 1:0 ${tempVars[ffmpegAudioStreamMap]} ${tempVars[ffmpegSubititleStreamMap]} ${tempVars[ffmpegOtherStreamMap]} ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null &")
+        tempVars+=([ffmpegQuery]="ffmpeg -loglevel error -hide_banner ${tempVars[parallelPreviewMergeTiming]} -i ${tempVars[fileEscaped]} -i \"${tempVars[tempOutput]}\" -async 1000 -c copy ${tempVars[audio]} -y -map 1:0 ${tempVars[ffmpegAudioStreamMap]} ${tempVars[ffmpegSubititleStreamMap]} ${tempVars[ffmpegOtherStreamMap]} ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null &")
         verbose "Finishing up merge..."
     fi
 
@@ -357,7 +357,7 @@ mapSubtitles() {
         eval "$query"
     fi
 
-    /bin/rm -f ${tempVars[cleanupFiles]}
+    rm -f ${tempVars[cleanupFiles]}
 }
 
 # Takes ${tempVars[query]}
@@ -420,8 +420,8 @@ upconvertSubtitles() {
     for c in "${vobSubtitlesTrackIds[@]}"; do
         eval "vobsub2srt ${1%.*}-vobsub$c"
         wait $!
-        /bin/rm -f "${1%.*}-vobsub$c.sub"
-        /bin/rm -f "${1%.*}-vobsub$c.idx"
+        rm -f "${1%.*}-vobsub$c.sub"
+        rm -f "${1%.*}-vobsub$c.idx"
     done
 
     for c in "${vobSubtitlesTrackIds[@]}"; do
@@ -718,7 +718,7 @@ while read -r FILE; do
     fi
 
     # Check if ffmpeg is installed
-    hash /bin/ffmpeg 2>/dev/null || { error "/bin/ffmpeg is not installed. /bin/ffmpeg must be installed!"; exit 5; }
+    hash ffmpeg 2>/dev/null || { error "/bin/ffmpeg is not installed. /bin/ffmpeg must be installed!"; exit 5; }
     # Check if handbrake is installed
     hash ${tempVars[handbrake]} 2>/dev/null || { error "${tempVars[handbrake]} is not installed. ${tempVars[handbrake]} must be installed!"; exit 5; }
 
@@ -750,7 +750,7 @@ while read -r FILE; do
 
         # Get ssim rating
         SSIM=$(eval "${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 25 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-tune=ssim --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} --start-at duration:$(echo "scale=0; ${tempVars[duration]} / 2" | bc) --stop-at duration:30 --modulus 2 -m -x aq-strength=1.0:${options[extraOptions]} --verbose=0 2>&1" | tee >(cat - >&5) | grep -E 'x265 \[info\]: global :.*SSIM Mean: [0-9]\.([0-9]{6})')
-        /bin/rm -f ${tempVars[tempOutput]}
+        rm -f ${tempVars[tempOutput]}
         tempVars+=([ssim]==$(echo "$SSIM" | sed -r "s/.*([0-9]{6}).*/\1/"))
         unset SSIM
         tempVars[output]="${tempVars[output]}.${tempVars[ssim]}"
@@ -760,7 +760,7 @@ while read -r FILE; do
     #	echo "hi!"
     #done
 
-    /bin/mkdir -p "${tempVars[output]%/*}"
+    mkdir -p "${tempVars[output]%/*}"
 
     if [ ${options[vbr]} -eq 0 ]; then
         tempVars[videoQuality]="-q ${options[quality]}";
@@ -792,28 +792,28 @@ while read -r FILE; do
     if [ -n "${tempVars[duration]}" ] && [ 1 -eq "${tempVars[passMax]}" ] && [ 1 -eq "${tempVars[passMin]}" ] && [ "${options[preview]}" -ne 1 ]; then
         if [ "${options[parallel]}" -eq 1 ]; then
             mapSubtitles
-            /bin/rm -f "${tempVars[tempOutput]}"
+            rm -f "${tempVars[tempOutput]}"
         elif [ -n "${tempVars[ffmpegSubtitlesMap]}" ]; then
             upconvertSubtitles "${tempVars[tempOutput]}"
             mapSubtitles
-            /bin/rm -f "${tempVars[tempOutput]}"
+            rm -f "${tempVars[tempOutput]}"
         else
             debug "Moving ${tempVars[tempOutput]} to ${tempVars[output]}"
-            /bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+            mv "${tempVars[tempOutput]}" "${tempVars[output]}"
         fi
         log "${tempVars[filename]} encoded successfully."
 
     elif [ "${options[preview]}" -eq 1 ] && [ $(echo "${tempVars[newDuration]}" | awk '{printf("%d\n",$0+=$0<0?0:0.9999999999999)}') -ne 0 ]; then
-        /bin/mkdir -p "${tempVars[output]%/*}"
+        mkdir -p "${tempVars[output]%/*}"
         if [ "${options[parallel]}" -eq 1 ]; then
             mapSubtitles
-            /bin/rm -f "${tempVars[tempOutput]}"
+            rm -f "${tempVars[tempOutput]}"
         elif [ ${tempVars[onSubtitleNumber]} -gt 0 ]; then
             upconvertSubtitles "${tempVars[tempOutput]}"
             mapSubtitles
-            /bin/rm -f "${tempVars[tempOutput]}"
+            rm -f "${tempVars[tempOutput]}"
         else
-            /bin/mv "${tempVars[tempOutput]}" "${tempVars[output]}"
+            mv "${tempVars[tempOutput]}" "${tempVars[output]}"
         fi
         log "Preview output in: ${tempVars[output]}"
 
@@ -838,9 +838,9 @@ while read -r FILE; do
         tempVars[encodedFileSize]=$(stat --printf="%s" "${tempVars[output]}")
         if [ ${options[delete]} -eq 1 ] && [ ${options[preview]} -eq 0 ]; then
             debug "Removing $FILE"
-            /bin/rm "$FILE"
+            rm "$FILE"
             debug "Moving ${tempVars[output]} to ${FILE%.*}"
-            /bin/mv "${tempVars[output]}" "${FILE%.*}.${options[outputFormat]}"
+            mv "${tempVars[output]}" "${FILE%.*}.${options[outputFormat]}"
         fi
 
         tempVars[encodedFileSize]=$(echo "scale=0; ${tempVars[encodedFileSize]}/1000000" | bc)
