@@ -28,6 +28,7 @@ defaults+=([smart]=0) # 0-1; Smart Mode; This isn't ready and doesnt work, pleas
 defaults+=([delete]=0) # 0-1; Delete source after encoding is complete; STRONGLY NOT RECOMMENED; defualt: 0
 defaults+=([depth]=2) # 0-INFINITY; How deap the search for files should go in subdirectories; default: 2
 defaults+=([logFile]="")
+defaults+=([parallel]=0) # https://github.com/FallingSnow/h265ize#commercial-interests
 
 # DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
 ################################################################################
