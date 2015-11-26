@@ -1,5 +1,23 @@
 #!/bin/bash
 
+# Check if running on a mac
+if [ "$(uname)" == "Darwin" ];then
+    isMac=true
+else
+    isMac=false
+fi
+
+# Check if bash is version 4+
+bashVersion=$(bash --version | grep -Eo "version [0-9]+\." | grep -o "[0-9]*")
+if [[ $bashVersion -lt 4 ]]; then
+    echo "Your bash is out of date, you must use at least version 4.";
+    echo "Your current bash major version is $bashVersion. Please update."
+    if $isMac; then
+        echo "Since you are on mac, it is recommened you use homebrew or fink to update your bash. See https://github.com/FallingSnow/h265ize/issues/6#issuecomment-158991841 for more info."
+    fi
+    exit 102
+fi
+
 # All of these preset do not need to be chanded, the script will work (in almost all cases) with all defaults
 
 declare -A defaults
@@ -30,6 +48,9 @@ defaults+=([depth]=2) # 0-INFINITY; How deap the search for files should go in s
 defaults+=([parallel]=0) # https://github.com/FallingSnow/h265ize#commercial-interests
 defaults+=([logFile]="")
 
+# Do not change unless you are on a mac
+getopt="getopt" # Contains the location of the getopt command; ex: /usr/local/XXXXX/gnu-getopt/1.1.6/bin/getopt
+
 # DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
 ################################################################################
 ################################################################################
@@ -47,7 +68,7 @@ NC='\033[0m' # No Color
 
 package="h265ize"
 description="Convert videos into x265 videos."
-version="0.2.2"
+version="0.2.3"
 commandDesciptions="
 -a :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
 -d :(NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
@@ -75,7 +96,7 @@ commandDesciptions="
 "
 how="Usage: $0 [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] [--debug] [--aspreset <preset>] [--depth <integer>] [--video-bitrate <integer>] [--delete] <file|directory> )"
 
-exclusivelySupportedExtensions="*.mts -o -iname *.m2ts" # Each extension should be seperated by -o -iname
+exclusivelySupportedExtensions="'*.mts' -o -iname '*.m2ts' -o -iname '*.mkv' -o -iname '*.m4v'" # Each extension should be seperated by -o -iname; example: '*.mkv' -o -iname '*.mp4'
 
 usage() {
     echo $how 1>&2
@@ -108,11 +129,18 @@ replace() {
 }
 
 # Test getopt
-if [ $(getopt --test; echo $?) -ne 4 ]; then
+if [ $($getopt --test; echo $?) -ne 4 ]; then
     error "You have a bad getopt version! Please update getopt."
+    exit 74
 fi
+# Check if ffmpeg is installed
+hash "ffmpeg" 2>/dev/null || { error "ffmpeg is not installed. ffprobe must be installed!"; exit 5; }
+# Check if ffmpeg is installed
+hash "ffprobe" 2>/dev/null || { error "ffprobe is not installed. ffprobe must be installed!"; exit 6; }
+# Check if bc is installed
+hash "bc" 2>/dev/null || { error "bc is not installed. bc must be installed!"; exit 9; }
 
-flags=$(getopt -o :d:q:m:n:t:f:g:l:x:vphaou -l aspreset:,stats,video-bitrate:,depth:,he-audio,debug,delete,help -- "$@")
+flags=$($getopt -o :d:q:m:n:t:f:g:l:x:vphaou -l aspreset:,stats,video-bitrate:,depth:,he-audio,debug,delete,help -- "$@")
 eval set -- "$flags"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -227,7 +255,10 @@ if [ -n "${options[aspreset]}" ]; then
             defaults[quality]=25;defaults[preset]="medium";defaults[extraOptions]="aq-mode=1:aq-strength=1.5:bframes=8:weightb=1:bframe-bias=95:rc-lookahead=60:keyint=1200:me=star:max-merge=5:rect:ctu=64:b-adapt=2:tu-inter-depth=4:tu-intra-depth=4:ipratio=0.6"
             ;;
         "perfect")
-            defaults[quality]=19;defaults[preset]="fast"
+            defaults[quality]=19;defaults[preset]="medium";defaults[extraOptions]="bframes=14"
+            ;;
+        "testing")
+            defaults[quality]=21;defaults[preset]="medium";defaults[extraOptions]="aq-mode=1:aq-strength=1.5:allow-non-conformance:ref=16:bframes=16:b-adapt=2:bframe-bias=100:rc-lookahead=240:scenecut=150:max-merge=5:subme=5:me=hex:limit-refs=2:b-intra:weightb:rd=6"
             ;;
         *)
             error "Unknown aspreset ${options[aspreset]}."
@@ -281,17 +312,18 @@ fi
 
 options[watchInterval]=$(echo "scale=3; x=${options[watchInterval]}/4; if(x<1) print 0; x" | bc)
 
-# Check if bc is installed
-hash "bc" 2>/dev/null || { error "bc is not installed. bc must be installed!"; exit 9; }
-
 declare -A ICO3TONAME
 ICO3TONAME=(["aar"]="Afar" ["abk"]="Abkhazian" ["afr"]="Afrikaans" ["aka"]="Akan" ["alb"]="Albanian" ["amh"]="Amharic" ["ara"]="Arabic" ["arg"]="Aragonese" ["arm"]="Armenian" ["asm"]="Assamese" ["ava"]="Avaric" ["ave"]="Avestan" ["aym"]="Aymara" ["aze"]="Azerbaijani" ["bak"]="Bashkir" ["bam"]="Bambara" ["baq"]="Basque" ["bel"]="Belarusian" ["ben"]="Bengali" ["bih"]="Bihari languages" ["bis"]="Bislama" ["bos"]="Bosnian" ["bre"]="Breton" ["bul"]="Bulgarian" ["bur"]="Burmese" ["cat"]="Catalan; Valencian" ["cha"]="Chamorro" ["che"]="Chechen" ["chi"]="Chinese" ["chu"]="Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic" ["chv"]="Chuvash" ["cor"]="Cornish" ["cos"]="Corsican" ["cre"]="Cree" ["cze"]="Czech" ["dan"]="Danish" ["div"]="Divehi; Dhivehi; Maldivian" ["dut"]="Dutch; Flemish" ["dzo"]="Dzongkha" ["eng"]="English" ["epo"]="Esperanto" ["est"]="Estonian" ["ewe"]="Ewe" ["fao"]="Faroese" ["fij"]="Fijian" ["fin"]="Finnish" ["fre"]="French" ["fry"]="Western Frisian" ["ful"]="Fulah" ["geo"]="Georgian" ["ger"]="German" ["gla"]="Gaelic; Scottish Gaelic" ["gle"]="Irish" ["glg"]="Galician" ["glv"]="Manx" ["gre"]="Greek, Modern (1453-)" ["grn"]="Guarani" ["guj"]="Gujarati" ["hat"]="Haitian; Haitian Creole" ["hau"]="Hausa" ["heb"]="Hebrew" ["her"]="Herero" ["hin"]="Hindi" ["hmo"]="Hiri Motu" ["hrv"]="Croatian" ["hun"]="Hungarian" ["ibo"]="Igbo" ["ice"]="Icelandic" ["ido"]="Ido" ["iii"]="Sichuan Yi; Nuosu" ["iku"]="Inuktitut" ["ile"]="Interlingue; Occidental" ["ina"]="Interlingua (International Auxiliary Language Association)" ["ind"]="Indonesian" ["ipk"]="Inupiaq" ["ita"]="Italian" ["jav"]="Javanese" ["jpn"]="Japanese" ["kal"]="Kalaallisut; Greenlandic" ["kan"]="Kannada" ["kas"]="Kashmiri" ["kau"]="Kanuri" ["kaz"]="Kazakh" ["khm"]="Central Khmer" ["kik"]="Kikuyu; Gikuyu" ["kin"]="Kinyarwanda" ["kir"]="Kirghiz; Kyrgyz" ["kom"]="Komi" ["kon"]="Kongo" ["kor"]="Korean" ["kua"]="Kuanyama; Kwanyama" ["kur"]="Kurdish" ["lao"]="Lao" ["lat"]="Latin" ["lav"]="Latvian" ["lim"]="Limburgan; Limburger; Limburgish" ["lin"]="Lingala" ["lit"]="Lithuanian" ["ltz"]="Luxembourgish; Letzeburgesch" ["lub"]="Luba-Katanga" ["lug"]="Ganda" ["mac"]="Macedonian" ["mah"]="Marshallese" ["mal"]="Malayalam" ["mao"]="Maori" ["mar"]="Marathi" ["may"]="Malay" ["mlg"]="Malagasy" ["mlt"]="Maltese" ["mon"]="Mongolian" ["nau"]="Nauru" ["nav"]="Navajo; Navaho" ["nbl"]="Ndebele, South; South Ndebele" ["nde"]="Ndebele, North; North Ndebele" ["ndo"]="Ndonga" ["nep"]="Nepali" ["nno"]="Norwegian Nynorsk; Nynorsk, Norwegian" ["nob"]="Bokmål, Norwegian; Norwegian Bokmål" ["nor"]="Norwegian" ["nya"]="Chichewa; Chewa; Nyanja" ["oci"]="Occitan (post 1500); Provençal" ["oji"]="Ojibwa" ["ori"]="Oriya" ["orm"]="Oromo" ["oss"]="Ossetian; Ossetic" ["pan"]="Panjabi; Punjabi" ["per"]="Persian" ["pli"]="Pali" ["pol"]="Polish" ["por"]="Portuguese" ["pus"]="Pushto; Pashto" ["que"]="Quechua" ["roh"]="Romansh" ["rum"]="Romanian; Moldavian; Moldovan" ["run"]="Rundi" ["rus"]="Russian" ["sag"]="Sango" ["san"]="Sanskrit" ["sin"]="Sinhala; Sinhalese" ["slo"]="Slovak" ["slv"]="Slovenian" ["sme"]="Northern Sami" ["smo"]="Samoan" ["sna"]="Shona" ["snd"]="Sindhi" ["som"]="Somali" ["sot"]="Sotho, Southern" ["spa"]="Spanish; Castilian" ["srd"]="Sardinian" ["srp"]="Serbian" ["ssw"]="Swati" ["sun"]="Sundanese" ["swa"]="Swahili" ["swe"]="Swedish" ["tah"]="Tahitian" ["tam"]="Tamil" ["tat"]="Tatar" ["tel"]="Telugu" ["tgk"]="Tajik" ["tgl"]="Tagalog" ["tha"]="Thai" ["tib"]="Tibetan" ["tir"]="Tigrinya" ["ton"]="Tonga (Tonga Islands)" ["tsn"]="Tswana" ["tso"]="Tsonga" ["tuk"]="Turkmen" ["tur"]="Turkish" ["twi"]="Twi" ["uig"]="Uighur; Uyghur" ["ukr"]="Ukrainian" ["urd"]="Urdu" ["uzb"]="Uzbek" ["ven"]="Venda" ["vie"]="Vietnamese" ["vol"]="Volapük" ["wel"]="Welsh" ["wln"]="Walloon" ["wol"]="Wolof" ["xho"]="Xhosa" ["yid"]="Yiddish" ["yor"]="Yoruba" ["zha"]="Zhuang; Chuang" ["zul"]="Zulu" ["unk"]="Unknown" ["und"]="Unknown")
 
 DIRECTORY=${1%/}
 PARENTDIRECTORY="$(dirname "$DIRECTORY")"
 log "Finding videos..."
-FILES=$(find "$DIRECTORY" -maxdepth ${options[depth]} -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p')
-EXCLUSIVEFILES=$(find "$DIRECTORY" -maxdepth ${options[depth]} -type f -iname $exclusivelySupportedExtensions)
+if $isMac; then
+    FILES=$(find "$DIRECTORY" -maxdepth ${options[depth]} -type f -exec file -N -I -- {} + 2>/dev/null | sed -n 's!: video/[^:]*$!!p')
+else
+    FILES=$(find "$DIRECTORY" -maxdepth ${options[depth]} -type f -exec file -N -i -- {} + 2>/dev/null | sed -n 's!: video/[^:]*$!!p')
+fi
+EXCLUSIVEFILES=$(find "$DIRECTORY" -maxdepth ${options[depth]} -type f \( -iname $exclusivelySupportedExtensions \) 2>/dev/null)
 FILES=( "${FILES[@]}" "${EXCLUSIVEFILES[@]}" )
 IFS=$'\n'
 FILES=($(sort -du <<<"${FILES[*]}"))
@@ -315,7 +347,8 @@ trap_with_arg() {
 cleanup() {
     warn "$package did not end cleanly. Deleting temp file and extra files."
     if [ ${options[debug]} -eq 1 ]; then
-        debug "Temporary output at ${tempVars[tempOutput]} will not be deleted."
+        debug "Temporary output at ${tempVars[tempOutput]} has not been deleted because you are in debug mode."
+    else
         rm -f "${tempVars[tempOutput]}"
     fi
     rm -f ${tempVars[cleanupFiles]}
@@ -449,7 +482,11 @@ while read -r FILE; do
     debug "Preprocessing ${tempVars[filenameWithExtention]}..."
     debug $(eval "printf '%0.s-' {1..$(($(tput cols) - 19))}")
 
-    tempVars[fileSize]=$(stat --printf="%s" "$FILE")
+    if $isMac; then
+        tempVars[fileSize]=$(stat -n -f"%z" "$FILE")
+    else
+        tempVars[fileSize]=$(stat --printf="%s" "$FILE")
+    fi
     tempVars[fileSize]=$(echo "scale=0; ${tempVars[fileSize]}/1000000" | bc)
     tempVars+=([fileExtension]="${FILE##*.}")
     tempVars+=([filename]=$(basename "${FILE%.*}"))
@@ -471,12 +508,13 @@ while read -r FILE; do
     tempVars+=([outputDest]=${options[destination]%/})
     tempVars+=([relativeDest]="${tempVars[relativeDir]#/}")
     #echo -e "${lightb} RelativeDest: ${tempVars[relativeDest]}"
-    tempVars+=([outputFile]="${tempVars[filename]}${tempVars[previewSuffix]}.${options[outputFormat]}")
+    tempVars+=([outputFile]="${tempVars[filename]//\`/\'}${tempVars[previewSuffix]}.${options[outputFormat]}")
     if [ -n "${tempVars[relativeDest]}" ]; then
         tempVars+=([output]="${tempVars[outputDest]}/${tempVars[relativeDest]}/${tempVars[outputFile]}")
     else
         tempVars+=([output]="${tempVars[outputDest]}/${tempVars[outputFile]}")
     fi
+    debug "Output: ${tempVars[output]}"
     tempVars+=([tempDirEscaped]=$(printf '%q' "${options[tempDir]%/}"))
     tempVars+=([tempOutput]="${tempVars[tempDirEscaped]}/${options[tempName]}-$RANDOM.${options[outputFormat]}")
 
@@ -493,7 +531,7 @@ while read -r FILE; do
     fi
 
     # Get number of streams
-    tempVars+=([numStreams]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o '\[STREAM\]' | wc -l))
+    tempVars+=([numStreams]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o '\[STREAM\]' | wc -l | awk '{print $1}'))
     tempVars+=([numStreamsFromIndex]=$(expr ${tempVars[numStreams]} - 1))
 
     # Get number of audio tracks
@@ -585,6 +623,9 @@ while read -r FILE; do
         if [ "$codec_type" = "video" ] && [ -n "${tempVars[videoSet]}" ]; then
             warn "Multiple videos within single container detected. Handbrake only supports the first video within a container, so the rest will be skipped."
         elif [ "$codec_type" = "video" ]; then
+            if [ -z "$width" ] || [ -z "$height" ]; then
+                warn "No width and/or height was detected for the input video. Your ffmpeg is most likely out of date. I recommend ffmpeg version 2.8.2."
+            fi
             tempVars[videoSet]=1
             tempVars+=([sourceWidth]="$width")
             tempVars+=([sourceHeight]="$height")
@@ -605,6 +646,11 @@ while read -r FILE; do
             tempVars[onAudioNumber]=$((${tempVars[onAudioNumber]} + 1))
             if [ ${tempVars[onAudioNumber]} = 1 ]; then
                 tempVars+=([defaultAudioLang]="$language")
+            fi
+
+            if [ -z "$codec_name" ]; then
+                error "A codec was not provided for stream $i. Your ffmpeg (current: $(ffmpeg -version | head -n 1 | awk '{print $3}'), recommended: 2.8.2) is most likely out of date."
+                exit 999
             fi
 
             addAudioNameToVar "$title"
@@ -718,10 +764,8 @@ while read -r FILE; do
         tempVars+=([handbrake]=${options[handbrakecli]})
     fi
 
-    # Check if ffmpeg is installed
-    hash ffmpeg 2>/dev/null || { error "ffmpeg is not installed. ffmpeg must be installed!"; exit 5; }
     # Check if handbrake is installed
-    hash ${tempVars[handbrake]} 2>/dev/null || { error "${tempVars[handbrake]} is not installed. ${tempVars[handbrake]} must be installed!"; exit 5; }
+    hash "${tempVars[handbrake]}" 2>/dev/null || { error "${tempVars[handbrake]} is not installed. ${tempVars[handbrake]} must be installed!"; exit 7; }
 
     if [ ${options[accurateTimestamps]} -eq 1 ]; then
         if [ -n "${options[extraOptions]}" ]; then
@@ -836,7 +880,11 @@ while read -r FILE; do
     verbose $green "File encoding time: $yellow$((${tempVars[timeDifference]} / 60))$NC minute(s) and $yellow$((${tempVars[timeDifference]} % 60))$NC second(s)"
 
     if [ -z "$badfile" ]; then
-        tempVars[encodedFileSize]=$(stat --printf="%s" "${tempVars[output]}")
+        if $isMac; then
+            tempVars[encodedFileSize]=$(stat -n -f"%z" "${tempVars[output]}")
+        else
+             tempVars[encodedFileSize]=$(stat --printf="%s" "${tempVars[output]}")
+        fi
         if [ ${options[delete]} -eq 1 ] && [ ${options[preview]} -eq 0 ]; then
             debug "Removing $FILE"
             rm "$FILE"
