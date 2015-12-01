@@ -89,10 +89,10 @@ commandDesciptions="
 --delete : Delete source after encoding is complete; STRONGLY NOT RECOMMENED
 --depth :How deap the search for files should go in subdirectories; default: 2
 --debug :Debug mode; Print extra debugging information
---aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
 --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
---he-audio :0-1; High Efficiency audio mode; default 0
---copy-audio :0-1; Don't encode the audio streams, just copy them; default 0
+--he-audio :High Efficiency audio mode
+--copy-audio :Don't encode the audio streams, just copy them
+--aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
 > finalCut: Uses the slow preset and allows QP to shift between 19 and 23
 > animeHigh: Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these are high latency encodes
 --help :Help; Shows this help page
