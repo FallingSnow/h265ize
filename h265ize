@@ -33,7 +33,7 @@ defaults+=([tempDir]="$HOME/h265") # (NO TRAILING SLASH) Directory where new unf
 defaults+=([previewLength]=30) # Seconds to be encoded in preview mode; default: 30
 defaults+=([timeDiffLimit]=1) # Seconds in length that the output is allowed to differ from the original source; A 3 hour movie usually differs by about .2 seconds; Integers ONLY; default: 1 (Allows output up to 1 second longer or shorter)
 defaults+=([extraOptions]="") # Extra options; default: [empty]
-defaults+=([heaudio]=0) # 0-1; High Efficency audio mode; default 0
+defaults+=([heaudio]=0) # 0-1; High Efficiency audio mode; default 0
 defaults+=([copyaudio]=0) # 0-1; Don't encode the audio streams, just copy them; default 0
 defaults+=([handbrakecli]="HandBrakeCLI") # handbrakecli command; this is the default handbrake installation; this encodes in 8bit only; default: HandBrakeCLI
 defaults+=([handbrakecli10bit]="HandBrakeCLI10bit") # handbrakecli command for 10bit encodes; default: HandBrakeCLI10bit
@@ -91,7 +91,7 @@ commandDesciptions="
 --debug :Debug mode; Print extra debugging information
 --aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
 --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
---he-audio :0-1; High Efficency audio mode; default 0
+--he-audio :0-1; High Efficiency audio mode; default 0
 --copy-audio :0-1; Don't encode the audio streams, just copy them; default 0
 > finalCut: Uses the slow preset and allows QP to shift between 19 and 23
 > animeHigh: Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these are high latency encodes

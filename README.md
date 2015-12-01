@@ -86,6 +86,10 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 
 > --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
 
+> --he-audio :0-1; High Efficiency audio mode; default 0
+
+> --copy-audio :0-1; Don't encode the audio streams, just copy them; default 0
+
 > --help :Help; Shows this help page
 
 #### Aspresets <a name="aspresets"></a>
