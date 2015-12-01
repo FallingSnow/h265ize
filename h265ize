@@ -34,6 +34,7 @@ defaults+=([previewLength]=30) # Seconds to be encoded in preview mode; default:
 defaults+=([timeDiffLimit]=1) # Seconds in length that the output is allowed to differ from the original source; A 3 hour movie usually differs by about .2 seconds; Integers ONLY; default: 1 (Allows output up to 1 second longer or shorter)
 defaults+=([extraOptions]="") # Extra options; default: [empty]
 defaults+=([heaudio]=0) # 0-1; High Efficency audio mode; default 0
+defaults+=([copyaudio]=0) # 0-1; Don't encode the audio streams, just copy them; default 0
 defaults+=([handbrakecli]="HandBrakeCLI") # handbrakecli command; this is the default handbrake installation; this encodes in 8bit only; default: HandBrakeCLI
 defaults+=([handbrakecli10bit]="HandBrakeCLI10bit") # handbrakecli command for 10bit encodes; default: HandBrakeCLI10bit
 defaults+=([verbose]=0) # 0-1; Verbose Mode; Prints extra output; I actually spent a lot of time on this feature, you should use it; default: 0
@@ -90,6 +91,8 @@ commandDesciptions="
 --debug :Debug mode; Print extra debugging information
 --aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
 --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
+--he-audio :0-1; High Efficency audio mode; default 0
+--copy-audio :0-1; Don't encode the audio streams, just copy them; default 0
 > finalCut: Uses the slow preset and allows QP to shift between 19 and 23
 > animeHigh: Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these are high latency encodes
 --help :Help; Shows this help page
@@ -140,7 +143,7 @@ hash "ffprobe" 2>/dev/null || { error "ffprobe is not installed. ffprobe must be
 # Check if bc is installed
 hash "bc" 2>/dev/null || { error "bc is not installed. bc must be installed!"; exit 9; }
 
-flags=$($getopt -o :d:q:m:n:t:f:g:l:x:vphaou -l aspreset:,stats,video-bitrate:,depth:,he-audio,debug,delete,help -- "$@")
+flags=$($getopt -o :d:q:m:n:t:f:g:l:x:vphaou -l aspreset:,stats,video-bitrate:,depth:,he-audio,copy-audio,debug,delete,help -- "$@")
 eval set -- "$flags"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -220,6 +223,9 @@ while [ $# -gt 0 ]; do
             ;;
         --he-audio)
             options[heaudio]=1
+            ;;
+        --copy-audio)
+            options[copyaudio]=1
             ;;
         # --smart)
             # options[smart]=1
@@ -316,7 +322,7 @@ declare -A ICO3TONAME
 ICO3TONAME=(["aar"]="Afar" ["abk"]="Abkhazian" ["afr"]="Afrikaans" ["aka"]="Akan" ["alb"]="Albanian" ["amh"]="Amharic" ["ara"]="Arabic" ["arg"]="Aragonese" ["arm"]="Armenian" ["asm"]="Assamese" ["ava"]="Avaric" ["ave"]="Avestan" ["aym"]="Aymara" ["aze"]="Azerbaijani" ["bak"]="Bashkir" ["bam"]="Bambara" ["baq"]="Basque" ["bel"]="Belarusian" ["ben"]="Bengali" ["bih"]="Bihari languages" ["bis"]="Bislama" ["bos"]="Bosnian" ["bre"]="Breton" ["bul"]="Bulgarian" ["bur"]="Burmese" ["cat"]="Catalan; Valencian" ["cha"]="Chamorro" ["che"]="Chechen" ["chi"]="Chinese" ["chu"]="Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic" ["chv"]="Chuvash" ["cor"]="Cornish" ["cos"]="Corsican" ["cre"]="Cree" ["cze"]="Czech" ["dan"]="Danish" ["div"]="Divehi; Dhivehi; Maldivian" ["dut"]="Dutch; Flemish" ["dzo"]="Dzongkha" ["eng"]="English" ["epo"]="Esperanto" ["est"]="Estonian" ["ewe"]="Ewe" ["fao"]="Faroese" ["fij"]="Fijian" ["fin"]="Finnish" ["fre"]="French" ["fry"]="Western Frisian" ["ful"]="Fulah" ["geo"]="Georgian" ["ger"]="German" ["gla"]="Gaelic; Scottish Gaelic" ["gle"]="Irish" ["glg"]="Galician" ["glv"]="Manx" ["gre"]="Greek, Modern (1453-)" ["grn"]="Guarani" ["guj"]="Gujarati" ["hat"]="Haitian; Haitian Creole" ["hau"]="Hausa" ["heb"]="Hebrew" ["her"]="Herero" ["hin"]="Hindi" ["hmo"]="Hiri Motu" ["hrv"]="Croatian" ["hun"]="Hungarian" ["ibo"]="Igbo" ["ice"]="Icelandic" ["ido"]="Ido" ["iii"]="Sichuan Yi; Nuosu" ["iku"]="Inuktitut" ["ile"]="Interlingue; Occidental" ["ina"]="Interlingua (International Auxiliary Language Association)" ["ind"]="Indonesian" ["ipk"]="Inupiaq" ["ita"]="Italian" ["jav"]="Javanese" ["jpn"]="Japanese" ["kal"]="Kalaallisut; Greenlandic" ["kan"]="Kannada" ["kas"]="Kashmiri" ["kau"]="Kanuri" ["kaz"]="Kazakh" ["khm"]="Central Khmer" ["kik"]="Kikuyu; Gikuyu" ["kin"]="Kinyarwanda" ["kir"]="Kirghiz; Kyrgyz" ["kom"]="Komi" ["kon"]="Kongo" ["kor"]="Korean" ["kua"]="Kuanyama; Kwanyama" ["kur"]="Kurdish" ["lao"]="Lao" ["lat"]="Latin" ["lav"]="Latvian" ["lim"]="Limburgan; Limburger; Limburgish" ["lin"]="Lingala" ["lit"]="Lithuanian" ["ltz"]="Luxembourgish; Letzeburgesch" ["lub"]="Luba-Katanga" ["lug"]="Ganda" ["mac"]="Macedonian" ["mah"]="Marshallese" ["mal"]="Malayalam" ["mao"]="Maori" ["mar"]="Marathi" ["may"]="Malay" ["mlg"]="Malagasy" ["mlt"]="Maltese" ["mon"]="Mongolian" ["nau"]="Nauru" ["nav"]="Navajo; Navaho" ["nbl"]="Ndebele, South; South Ndebele" ["nde"]="Ndebele, North; North Ndebele" ["ndo"]="Ndonga" ["nep"]="Nepali" ["nno"]="Norwegian Nynorsk; Nynorsk, Norwegian" ["nob"]="Bokmål, Norwegian; Norwegian Bokmål" ["nor"]="Norwegian" ["nya"]="Chichewa; Chewa; Nyanja" ["oci"]="Occitan (post 1500); Provençal" ["oji"]="Ojibwa" ["ori"]="Oriya" ["orm"]="Oromo" ["oss"]="Ossetian; Ossetic" ["pan"]="Panjabi; Punjabi" ["per"]="Persian" ["pli"]="Pali" ["pol"]="Polish" ["por"]="Portuguese" ["pus"]="Pushto; Pashto" ["que"]="Quechua" ["roh"]="Romansh" ["rum"]="Romanian; Moldavian; Moldovan" ["run"]="Rundi" ["rus"]="Russian" ["sag"]="Sango" ["san"]="Sanskrit" ["sin"]="Sinhala; Sinhalese" ["slo"]="Slovak" ["slv"]="Slovenian" ["sme"]="Northern Sami" ["smo"]="Samoan" ["sna"]="Shona" ["snd"]="Sindhi" ["som"]="Somali" ["sot"]="Sotho, Southern" ["spa"]="Spanish; Castilian" ["srd"]="Sardinian" ["srp"]="Serbian" ["ssw"]="Swati" ["sun"]="Sundanese" ["swa"]="Swahili" ["swe"]="Swedish" ["tah"]="Tahitian" ["tam"]="Tamil" ["tat"]="Tatar" ["tel"]="Telugu" ["tgk"]="Tajik" ["tgl"]="Tagalog" ["tha"]="Thai" ["tib"]="Tibetan" ["tir"]="Tigrinya" ["ton"]="Tonga (Tonga Islands)" ["tsn"]="Tswana" ["tso"]="Tsonga" ["tuk"]="Turkmen" ["tur"]="Turkish" ["twi"]="Twi" ["uig"]="Uighur; Uyghur" ["ukr"]="Ukrainian" ["urd"]="Urdu" ["uzb"]="Uzbek" ["ven"]="Venda" ["vie"]="Vietnamese" ["vol"]="Volapük" ["wel"]="Welsh" ["wln"]="Walloon" ["wol"]="Wolof" ["xho"]="Xhosa" ["yid"]="Yiddish" ["yor"]="Yoruba" ["zha"]="Zhuang; Chuang" ["zul"]="Zulu" ["unk"]="Unknown" ["und"]="Unknown")
 
 DIRECTORY=${1%/}
-PARENTDIRECTORY="$(dirname \"$DIRECTORY\" | head -n 1)"
+PARENTDIRECTORY="$(eval dirname ${DIRECTORY// /\\ })"
 log "Finding videos..."
 if $isMac; then
     FILES=$(find "$DIRECTORY" -maxdepth ${options[depth]} -type f -exec file -N -I -- {} + 2>/dev/null | sed -n 's!: video/[^:]*$!!p')
@@ -578,7 +584,9 @@ while read -r FILE; do
     }
 
     addAudioCodec(){ # $1=format $2=bit_rate (flac only)
-        if [ $1 = "flac" ]; then
+        if [ "${options[copyaudio]}" -eq 1 ]; then
+            addAudioCodecToVar "copy"
+        elif [ $1 = "flac" ]; then
             addAudioCodecToVar "flac$2"
         elif [ $1 = "dts" ]; then
             addAudioCodecToVar "copy:dts"
@@ -587,6 +595,8 @@ while read -r FILE; do
         elif [ "${options[heaudio]}" -eq 1 ]; then
             addAudioCodecToVar "vorbis"
             #tempVars[audiobitrate]="-B 65"
+        elif [ $1 = "aac" ]; then
+            addAudioCodecToVar "fdk_aac"
         elif [ $1 = "ac3" ]; then
             addAudioCodecToVar "ac3"
         elif [ $1 = "vorbis" ]; then
