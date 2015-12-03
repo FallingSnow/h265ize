@@ -44,7 +44,8 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 ```
 
 ## Usage
-`./h265izer [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] [--debug] [--aspreset <preset>] [--depth <integer>] [--video-bitrate <integer>] [--delete] <file|directory>`
+`./h265izer [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] [--debug] [--aspreset <preset>] [--depth <integer>] [--video-bitrate <integer>] [--he-audio] [--copy-audio] [--delete] <file|directory>
+`
 ### Options
 > -a :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
 
@@ -76,7 +77,7 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 
 > -h :Help; Shows this help page
 
-> --delete : Delete source after encoding is complete; STRONGLY NOT RECOMMENED
+> --delete : Delete source after encoding is complete and replaces it with new encode; STRONGLY NOT RECOMMENED
 
 > --depth :How deap the search for files should go in subdirectories; default: 2
 
