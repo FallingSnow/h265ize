@@ -83,29 +83,35 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 
 > --debug :Debug mode; Print extra debugging information
 
+> --stats: Creates a stats file in the destination name h265ize.stats
+
 > --aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
 
 > --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
 
 > --he-audio :High Efficiency audio mode
 
+> --he-downmix :
+
 > --copy-audio :Don't encode the audio streams, just copy them
 
 > --help :Help; Shows this help page
 
+Run `h265ize --help` for more info.
+
 #### Aspresets <a name="aspresets"></a>
 | Preset | Description |
 |:---:|:---|
-| finalCut | Uses the slow preset and allows QP to shift between 19 and 23 |
-| animeHigh | Changes some advanced options to provide the lowest possible file size while still maintaining quality; Caution these settings create high latency encodes |
-| animeLow | Same as animeHigh but lowers file size even further for low quality encodes |
+| basic | Overall good preset, will always create high quality videos but may produce large files. |
+| testing-ssim | x265's native preset just in SSIM mode. |
+| testing-anime | A very good preset for all types of anime. Produces very good quality for a very small size. Warning: this preset creates a nonconformant, high latency encode. |
 
 #### Examples
 * `./h265izer -v big_buck_bunny_1080p_h264.mov`
 * `./h265izer -v -d /home -q 25 -g /tmp big_buck_bunny_folder`
 
 ## Stats file
-The stats file is located at the destination of the finished encoding under the name `h265ize.stats`. The file is composed of several lines. Each line is in the format
+The stats file is located at the destination of the finished encoding under the name `h265ize.stats`. This must be enabled using the `--stats` flag. The file is composed of several lines. Each line is in the format
 
 `
 [Finish Encoding Date],[Filename],[Original Size in Megabytes],[Encoded size in Megabytes],[Compression Ratio]
@@ -117,7 +123,7 @@ For exmaple:
 08/13 02:46:03 PM, [deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.00%
 `
 
-## Creating 10bit encodes
+## Creating 10bit encodes (Outdated)
 In order to encode 10bit encodes you must build handbrake yourself with a 10bit x265 build. In order to do this, follow these steps
 
 1. Copy the handbrake respository
@@ -164,6 +170,9 @@ X265.CONFIGURE.extra       = -DENABLE_CLI=OFF -DHIGH_BIT_DEPTH=ON
 mv build/HandBrakeCLI /bin/HandBrakeCLI10bit
 ```
 6. Winning. You're now ready to encode 10bit videos.
+
+### TODO
+- [ ] Audio normalization
 
 ## Commercial Interests
 There is a paid h265ize version available that includes the following additional automated features:
