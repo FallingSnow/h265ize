@@ -1,6 +1,6 @@
 # h265ize
 h265ize is a fire and forget weapon. A bash script utilizing handbrake to encode large quantities of videos with the hevc codec.
-For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265izer/ "Ayrton Sparling").
+For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265ize/ "Ayrton Sparling").
 
 If you have any questions or the script isn't working for you, feel free to open an issue.
 
