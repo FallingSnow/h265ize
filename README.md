@@ -93,7 +93,7 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 
 > --he-downmix :
 
-> --copy-audio :Don't encode the audio streams, just copy them
+> --copy-audio :Don't encode the audio streams, just copy them (Soon to become default)
 
 > --help :Help; Shows this help page
 
@@ -123,16 +123,16 @@ For exmaple:
 08/13 02:46:03 PM, [deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.00%
 `
 
-## Creating 10bit encodes (Outdated)
+## Creating 10bit encodes
 In order to encode 10bit encodes you must build handbrake yourself with a 10bit x265 build. In order to do this, follow these steps
 
-1. Copy the handbrake respository
+1. Copy the handbrake git repository
 ```
-svn checkout svn://svn.handbrake.fr/HandBrake/trunk hb-trunk
+git clone https://github.com/HandBrake/HandBrake.git HandBrake
 ```
 2. Change directories to the repository you just downloaded
 ```
-cd hb-trunk
+cd HandBrake
 ```
 3. Edit the module.defs file for x265 (in this case using vim)
 ```
