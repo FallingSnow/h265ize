@@ -36,8 +36,8 @@ defaults+=([extraOptions]="") # Extra options; default: [empty]
 defaults+=([heaudio]=0) # 0-1; High Efficiency audio mode; default 0
 defaults+=([downmixHeaudio]=0) # 0-1; Downmix to stereo with DplII (dolby pro logic ii) in High Efficiency audio mode; default 0
 defaults+=([copyaudio]=0) # 0-1; Don't encode the audio streams, just copy them; default 0
-defaults+=([handbrakecli]="HandBrakeCLI") # handbrakecli command; this is the default handbrake installation; this encodes in 8bit only; default: HandBrakeCLI
-defaults+=([handbrakecli10bit]="HandBrakeCLI10bit") # handbrakecli command for 10bit encodes; default: HandBrakeCLI10bit
+defaults+=([handbrakecli]="HandBrakeCLI-git") # handbrakecli command; this is the default handbrake installation; this encodes in 8bit only; default: HandBrakeCLI
+defaults+=([handbrakecli10bit]="HandBrakeCLI10bit-git") # handbrakecli command for 10bit encodes; default: HandBrakeCLI10bit
 defaults+=([verbose]=0) # 0-1; Verbose Mode; Prints extra output; I actually spent a lot of time on this feature, you should use it; default: 0
 defaults+=([preview]=0) # 0-1; Preview Mode; Only outputs a video sigment with the specified previewLength; default: 0
 defaults+=([override]=0) # 0-1; Override Mode; Allows videos already encoded with the h265 codec to be re-encoded; default: 0
@@ -243,6 +243,7 @@ while [ $# -gt 0 ]; do
             ;;
         --copy-audio)
             options[copyaudio]=1
+            warn "Audio is now copied by default."
             ;;
         # --smart)
             # options[smart]=1
@@ -275,7 +276,7 @@ if [ -n "${options[aspreset]}" ]; then
             defaults[quality]=19;defaults[preset]="medium";
             ;;
         "testing-anime")
-            defaults[quality]=19;defaults[preset]="medium";defaults+=([extraOptions]="allow-non-conformance:ref=8:bframes=8:rd=6:me=star:b-adapt=2:qg-size=64:rc-lookahead=40:scenecut=45:weightb=1:psy-rd=2.0")
+            defaults[quality]=19;defaults[preset]="medium";defaults+=([extraOptions]="allow-non-conformance:ref=8:bframes=8:rd=6:me=star:b-adapt=2:qg-size=64:rc-lookahead=40:scenecut=45:weightb=1:psy-rd=2.0");defaults[heaudio]=1
             ;;
         "testing-ssim")
             defaults[quality]=19;defaults[preset]="medium";defaults+=([extraOptions]="tune=ssim:ssim:psy-rd=0")
@@ -295,7 +296,7 @@ done
 
 package="h265ize"
 description="Convert videos into x265 videos."
-version="0.3.0"
+version="0.3.1"
 commandDesciptions="${underscore}Basic Options${NC}:
   ${cyan}-a${NC} :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
   ${cyan}-d${NC} :(NO TRAILING SLASH) Folder to output files to; default: \$HOME/h265; current: ${yellow}${options[destination]}${NC}
@@ -664,29 +665,7 @@ while read -r FILE; do
     }
 
     addAudioCodec(){ # $1=format $2=num_channels $3=bit_rate $4=bits_per_sample (flac only) $5=language
-        if [ "${options[copyaudio]}" -eq 1 ] || [ "${options[heaudio]}" -eq 1 ]; then
-            addAudioCodecToVar "copy"
-        elif [ $1 = "flac" ]; then
-            addAudioCodecToVar "flac$4"
-        elif [ $1 = "dts" ]; then
-            addAudioCodecToVar "copy:dts"
-        elif [ $1 = "dtshd" ]; then
-            addAudioCodecToVar "copy:dtshd"
-        elif [ $1 = "aac" ]; then
-            addAudioCodecToVar "fdk_aac"
-        elif [ $1 = "ac3" ]; then
-            addAudioCodecToVar "ac3"
-        elif [ $1 = "vorbis" ]; then
-            addAudioCodecToVar "vorbis"
-        elif [ $1 = "mp3" ]; then
-            if [ "${options[upconvert]}" = 0 ]; then
-                addAudioCodecToVar "mp3"
-            else
-                addAudioCodecToVar "fdk_haac"
-            fi
-        else
-            addAudioCodecToVar "copy"
-        fi
+        addAudioCodecToVar "copy"
     }
 
     declare -a subtitleNames
@@ -744,12 +723,12 @@ while read -r FILE; do
             addAudioCodec $codec_name $channels $bit_rate $bits_per_raw_sample $language ${tempVars[onAudioNumber]}
 
             tempVars+=([ffmpegAudioStreamMap]="-map 0:$i ")
-            if [ "${options[heaudio]}" -eq 1 ]; then
+            if [ "${options[heaudio]}" -eq 1 ] && [ "$codec_name" != "flac" ]; then
                 debug "Adding High Efficiency Opus codec for audio stream ${tempVars[onAudioNumber]}."
                 if [ ${options[downmixHeaudio]} -eq 0 ] || [[ $channels -lt 3 ]]; then
-                    newBitrate=$(echo "scale=0; (64 * $channels) / 2" | bc)
+                    newBitrate=$(echo "scale=0; (96 * $channels) / 2" | bc)
                 else
-                    newBitrate="64"
+                    newBitrate="96"
                     tempVars+=([ffmpegAudioStreamMap]="-ac 2 -af aresample=matrix_encoding=dplii ")
                 fi
                 tempVars+=([ffmpegAudioStreamMap]="-c:a:$(expr ${tempVars[onAudioNumber]} - 1) libopus -b:a:$(expr ${tempVars[onAudioNumber]} - 1) ${newBitrate}k ")
@@ -944,7 +923,7 @@ while read -r FILE; do
         if [ "${options[parallel]}" -eq 1 ]; then
             mapSubtitles
             rm -f "${tempVars[tempOutput]}"
-        elif [ -n "${tempVars[ffmpegSubtitlesMap]}" ] || [ -n "${options[heaudio]}" ]; then
+        elif [ -n "${tempVars[ffmpegSubtitlesMap]}" ] || [ "${options[heaudio]}" -eq 1 ]; then
             upconvertSubtitles "${tempVars[tempOutput]}"
             mapSubtitles
             rm -f "${tempVars[tempOutput]}"
@@ -956,7 +935,7 @@ while read -r FILE; do
 
     elif [ "${options[preview]}" -eq 1 ] && [ $(echo "${tempVars[newDuration]}" | awk '{printf("%d\n",$0+=$0<0?0:0.9999999999999)}') -ne 0 ]; then
         mkdir -p "${tempVars[output]%/*}"
-        if [ "${options[parallel]}" -eq 1 ]; then
+        if [ "${options[parallel]}" -eq 1 ] || [ "${options[heaudio]}" -eq 1 ]; then
             mapSubtitles
             rm -f "${tempVars[tempOutput]}"
         elif [ ${tempVars[onSubtitleNumber]} -gt 0 ]; then
