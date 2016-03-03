@@ -36,8 +36,8 @@ defaults+=([extraOptions]="") # Extra options; default: [empty]
 defaults+=([heaudio]=0) # 0-1; High Efficiency audio mode; default 0
 defaults+=([downmixHeaudio]=0) # 0-1; Downmix to stereo with DplII (dolby pro logic ii) in High Efficiency audio mode; default 0
 defaults+=([copyaudio]=0) # 0-1; Don't encode the audio streams, just copy them; default 0
-defaults+=([handbrakecli]="HandBrakeCLI-git") # handbrakecli command; this is the default handbrake installation; this encodes in 8bit only; default: HandBrakeCLI
-defaults+=([handbrakecli10bit]="HandBrakeCLI10bit-git") # handbrakecli command for 10bit encodes; default: HandBrakeCLI10bit
+defaults+=([handbrakecli]="HandBrakeCLI") # handbrakecli command; this is the default handbrake installation; this encodes in 8bit only; default: HandBrakeCLI
+defaults+=([handbrakecli10bit]="HandBrakeCLI10bit") # handbrakecli command for 10bit encodes; default: HandBrakeCLI10bit
 defaults+=([verbose]=0) # 0-1; Verbose Mode; Prints extra output; I actually spent a lot of time on this feature, you should use it; default: 0
 defaults+=([preview]=0) # 0-1; Preview Mode; Only outputs a video sigment with the specified previewLength; default: 0
 defaults+=([override]=0) # 0-1; Override Mode; Allows videos already encoded with the h265 codec to be re-encoded; default: 0
