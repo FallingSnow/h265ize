@@ -18,41 +18,11 @@ if [[ $bashVersion -lt 4 ]]; then
     exit 102
 fi
 
-# All of these preset do not need to be chanded, the script will work (in almost all cases) with all defaults
-
-declare -A defaults
-defaults+=([destination]="$HOME/h265") # (NO TRAILING SLASH) Folder to output files to; default: $HOME/h265
-defaults+=([quality]=19) # 0-51; Sets the qp quality target; default: 19
-defaults+=([vbr]=0) # Sets the video bitrate, set to 0 to use qp instead of a target bitrate; default: 0
-defaults+=([preset]="fast") # x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
-defaults+=([nativeLangCode]="eng") # Examples: eng, fre, spa, dut, et cetera; default: eng
-defaults+=([accurateTimestamps]=0) # Accurate Timestamps (substantially increases file size but sometimes fixes timestamps); default: 0
-defaults+=([tempName]="encoding-in-process") # Temporary name of the new unfinished file; default: encoding-in-process
-defaults+=([outputFormat]="mkv") # Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
-defaults+=([tempDir]="$HOME/h265") # (NO TRAILING SLASH) Directory where new unfinished file is stored; default: $HOME/h265
-defaults+=([previewLength]=30) # Seconds to be encoded in preview mode; default: 30
-defaults+=([timeDiffLimit]=2) # Seconds in length that the output is allowed to differ from the original source; A 3 hour movie usually differs by about .2 seconds; Integers ONLY; default: 1 (Allows output up to 1 second longer or shorter)
-defaults+=([extraOptions]="") # Extra options; default: [empty]
-defaults+=([heaudio]=0) # 0-1; High Efficiency audio mode; default 0
-defaults+=([downmixHeaudio]=0) # 0-1; Downmix to stereo with DplII (dolby pro logic ii) in High Efficiency audio mode; default 0
-defaults+=([copyaudio]=0) # 0-1; Don't encode the audio streams, just copy them; default 0
-defaults+=([handbrakecli]="HandBrakeCLI") # handbrakecli command; this is the default handbrake installation; this encodes in 8bit only; default: HandBrakeCLI
-defaults+=([handbrakecli10bit]="HandBrakeCLI10bit") # handbrakecli command for 10bit encodes; default: HandBrakeCLI10bit
-defaults+=([verbose]=0) # 0-1; Verbose Mode; Prints extra output; I actually spent a lot of time on this feature, you should use it; default: 0
-defaults+=([preview]=0) # 0-1; Preview Mode; Only outputs a video sigment with the specified previewLength; default: 0
-defaults+=([override]=0) # 0-1; Override Mode; Allows videos already encoded with the h265 codec to be re-encoded; default: 0
-defaults+=([upconvert]=1) # 0-1; Upconvert Mode; Converts vob/dvd subs to srt format; Only works with mkv's; default: 1
-defaults+=([stats]=0) # 0-1; Generate stats file located at [destination]/h265ize-[date-time].stats; default: 0
-defaults+=([debug]=0) # 0-1; Debug Mode; Print extra debugging information; default: 0
-defaults+=([smart]=0) # 0-1; Smart Mode; This isn't ready and doesnt work, please don't enable this feature; default: 0
-defaults+=([delete]=0) # 0-1; Delete source after encoding is complete; STRONGLY NOT RECOMMENED; default: 0
-defaults+=([depth]=2) # 0-INFINITY; How deap the search for files should go in subdirectories; default: 2
-defaults+=([multipass]=0) # 0-INFINITY; default: 2
-defaults+=([parallel]=0) # https://github.com/FallingSnow/h265ize#commercial-interests
-defaults+=([logFile]="")
-
-# Do not change unless you are on a mac
-getopt="getopt" # Contains the location of the getopt command; ex: /usr/local/XXXXX/gnu-getopt/1.1.6/bin/getopt
+if [ -e "settings" ]; then
+    source "settings"
+else
+    source "settings.default"
+fi
 
 # DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
 ################################################################################
@@ -76,16 +46,6 @@ NC='\e[0m\e[0;00m' # No Color
 
 # Commands
 # End Commands
-
-# Parallel variables
-options[parallelUser]="ayrton"
-options[segments]=8
-options[nodes]=2
-options[parallelOutput]="/mnt/nfs/encodes"
-options[watchInterval]=5
-options[smallHQAudio]=1
-options[seekMode]=2 # 1: Seektable based, 2: Duration based
-# End Parallel variables
 
 exclusivelySupportedExtensions="'*.mts' -o -iname '*.m2ts' -o -iname '*.mkv' -o -iname '*.m4v'" # Each extension should be seperated by -o -iname; example: '*.mkv' -o -iname '*.mp4'
 
@@ -296,7 +256,7 @@ done
 
 package="h265ize"
 description="Convert videos into x265 videos."
-version="0.3.1"
+version="0.3.0-1"
 commandDesciptions="${underscore}Basic Options${NC}:
   ${cyan}-a${NC} :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
   ${cyan}-d${NC} :(NO TRAILING SLASH) Folder to output files to; default: \$HOME/h265; current: ${yellow}${options[destination]}${NC}
@@ -426,6 +386,9 @@ cleanup() {
 
     exit 4
 }
+if [ -e "h265ize-parallel" ]; then
+    source "h265ize-parallel"
+fi
 mapSubtitles() {
     if [ ${options[parallel]} = 0 ]; then
         tempVars+=([ffmpegQuery]="ffmpeg -loglevel error -hide_banner -i \"${tempVars[tempOutput]}\" ${tempVars[additionalInputs]} -c copy -y ${tempVars[ffmpegVideoStreamMap]} ${tempVars[ffmpegAudioStreamMap]} ${tempVars[ffmpegHEAudio]} ${tempVars[ffmpegSubtitleStreamMap]} ${tempVars[ffmpegOtherStreamMap]} ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null &")
@@ -906,6 +869,13 @@ while read -r FILE; do
         mergeSegments
     else
         handbrakeFile "${tempVars[query]}"
+    fi
+
+    if [ "${options[parallel]}" -eq 1 ] && [ "${options[multipass]}" -eq 1 ]; then
+        error "Multipass encoding is not avaliable in parallel mode."
+        exit 765
+    elif [[ "${options[multipass]}" -eq 1 ]]; then
+        echo "multipass - meep - doesnt work"
     fi
 
     tempVars+=([newDuration]=$(ffprobe -loglevel quiet -show_format "${tempVars[tempOutput]}" | grep 'duration' | sed 's/.*duration=\(.*\).*/\1/'))
