@@ -256,7 +256,7 @@ done
 
 package="h265ize"
 description="Convert videos into x265 videos."
-version="0.3.0-1"
+version="0.3.1-1"
 commandDesciptions="${underscore}Basic Options${NC}:
   ${cyan}-a${NC} :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
   ${cyan}-d${NC} :(NO TRAILING SLASH) Folder to output files to; default: \$HOME/h265; current: ${yellow}${options[destination]}${NC}
