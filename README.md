@@ -44,7 +44,7 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 ```
 
 ## Usage
-`./h265izer [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] [--debug] [--aspreset <preset>] [--depth <integer>] [--video-bitrate <integer>] [--he-audio] [--copy-audio] [--delete] <file|directory>
+`./h265izer [-h|--help] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] [--debug] [--aspreset <preset>] [--depth <integer>] [--video-bitrate <integer>] [--he-audio] [--he-downmix] [--delete] <file|directory>
 `
 ### Options
 > -a :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
@@ -67,15 +67,15 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 
 > -q :Sets the qp quality target; default: 19
 
-> -t :Temporary name of the new unfinished file
+> -t :Temporary name of the new unfinished file. A random string of numbers will be appended to the name
 
 > -u :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
 
 > -v :Verbose mode; Display extra output
 
-> -x :Extra x265 options
+> -x :Extra x265 options (Write them in [handbrake syntax](https://trac.handbrake.fr/wiki/x264Options)). Options can be found on the [x265 options page](https://x265.readthedocs.org/en/default/cli.html)
 
-> -h :Help; Shows this help page
+> -h :Help; Shows help page
 
 > --delete : Delete source after encoding is complete and replaces it with new encode; STRONGLY NOT RECOMMENED
 
@@ -83,7 +83,7 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 
 > --debug :Debug mode; Print extra debugging information
 
-> --stats: Creates a stats file in the destination name h265ize.stats
+> --stats: Creates a stats file in the destination named h265ize.stats
 
 > --aspreset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
 
@@ -91,11 +91,9 @@ wget https://raw.githubusercontent.com/FallingSnow/h265ize/master/h265ize; chmod
 
 > --he-audio :High Efficiency audio mode
 
-> --he-downmix :
+> --he-downmix :If there are more than 2.1 audio channels, downmix them to stereo. **`he-audio` must also be enabled**
 
-> --copy-audio :Don't encode the audio streams, just copy them (Soon to become default)
-
-> --help :Help; Shows this help page
+> --help :Help; Shows help page
 
 Run `h265ize --help` for more info.
 
