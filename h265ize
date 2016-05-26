@@ -18,10 +18,11 @@ if [[ $bashVersion -lt 4 ]]; then
     exit 102
 fi
 
-if [ -e "settings" ]; then
-    source "settings"
+SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if [ -e "$SCRIPTDIR/settings" ]; then
+    source "$SCRIPTDIR/settings"
 else
-    source "settings.default"
+    source "$SCRIPTDIR/settings.default"
 fi
 
 # DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
@@ -49,6 +50,9 @@ NC='\e[0m\e[0;00m' # No Color
 
 exclusivelySupportedExtensions="'*.mts' -o -iname '*.m2ts' -o -iname '*.mkv' -o -iname '*.m4v'" # Each extension should be seperated by -o -iname; example: '*.mkv' -o -iname '*.mp4'
 
+package="h265ize"
+description="Convert videos into x265 videos."
+version="0.3.1-2"
 usage() {
     echo $how 1>&2
     exit 0
@@ -117,7 +121,7 @@ hash "ffprobe" 2>/dev/null || { error "ffprobe is not installed. ffprobe must be
 # Check if bc is installed
 hash "bc" 2>/dev/null || { error "bc is not installed. bc must be installed!"; exit 9; }
 
-flags=$($getopt -o :d:q:m:n:t:f:g:l:x:vphaou -l aspreset:,logfile:,stats,video-bitrate:,depth:,he-audio,he-downmix,copy-audio,debug,delete,help,version -- "$@")
+flags=$($getopt -o :d:q:m:n:t:f:g:l:x:vphaou -l 10bit,12bit,aspreset:,logfile:,stats,video-bitrate:,depth:,he-audio,he-downmix,copy-audio,debug,delete,help,version -- "$@")
 eval set -- "$flags"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -165,6 +169,12 @@ while [ $# -gt 0 ]; do
             ;;
         -x)
             options[extraOptions]="$2:"; shift
+            ;;
+        --10bit)
+            options[10bit]=1
+            ;;
+        --12bit)
+            options[12bit]=1
             ;;
         --aspreset)
             options[aspreset]="$2"; shift
@@ -254,9 +264,6 @@ for index in "${!defaults[@]}";do
     fi
 done
 
-package="h265ize"
-description="Convert videos into x265 videos."
-version="0.3.1-1"
 commandDesciptions="${underscore}Basic Options${NC}:
   ${cyan}-a${NC} :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
   ${cyan}-d${NC} :(NO TRAILING SLASH) Folder to output files to; default: \$HOME/h265; current: ${yellow}${options[destination]}${NC}
@@ -638,7 +645,7 @@ while read -r FILE; do
 
     for i in $(seq 0 ${tempVars[numStreamsFromIndex]}); do
 
-        eval $(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep -E "codec_name|codec_type|bits_per_raw_sample|width|height|avg_frame_rate|channels")
+        eval $(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep -E "^codec_name|^codec_type|^bits_per_raw_sample|^width|^height|^avg_frame_rate|^channels")
         #echo `[[$codec_type -eq "video"]]`
         #debug "$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE")"
         language=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:language" | sed -n -e 's/^.*language=//p')
@@ -804,16 +811,18 @@ while read -r FILE; do
     # Find out if bit depth 10 or 8 should be used
     tempVars+=([bitDepth10]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'profile=High 10'))
 
-    if [ -n "${tempVars[bitDepth10]}" ]; then
+    if [ "${options[12bit]}" -eq 1 ]; then
+        tempVars+=([profile]="main12")
+        tempVars+=([encoderType]="_12bit")
+   elif [ -n "${tempVars[bitDepth10]}" ] || [ "${options[10bit]}" -eq 1 ]; then
         tempVars+=([profile]="main10")
-        tempVars+=([handbrake]=${options[handbrakecli10bit]})
+        tempVars+=([encoderType]="_10bit")
     else
         tempVars+=([profile]="main")
-        tempVars+=([handbrake]=${options[handbrakecli]})
     fi
 
     # Check if handbrake is installed
-    hash "${tempVars[handbrake]}" 2>/dev/null || { error "${tempVars[handbrake]} is not installed. ${tempVars[handbrake]} must be installed!"; exit 7; }
+    hash "${options[handbrakecli]}" 2>/dev/null || { error "${options[handbrakecli]} is not installed. ${options[handbrakecli]} must be installed!"; exit 7; }
 
     if [ ${options[accurateTimestamps]} -eq 1 ]; then
         if [ -n "${options[extraOptions]}" ]; then
@@ -842,7 +851,7 @@ while read -r FILE; do
         exec 5>&1
 
         # Get ssim rating
-        SSIM=$(eval "${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 25 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-tune=ssim --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} --start-at duration:$(echo "scale=0; ${tempVars[duration]} / 2" | bc) --stop-at duration:30 --modulus 2 -m -x aq-strength=1.0:${options[extraOptions]} --verbose=0 2>&1" | tee >(cat - >&5) | grep -E 'x265 \[info\]: global :.*SSIM Mean: [0-9]\.([0-9]{6})')
+        SSIM=$(eval "${options[handbrakecli]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 25 -e x265 --crf ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-tune=ssim --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} --start-at duration:$(echo "scale=0; ${tempVars[duration]} / 2" | bc) --stop-at duration:30 --modulus 2 -m -x aq-strength=1.0:${options[extraOptions]} --verbose=0 2>&1" | tee >(cat - >&5) | grep -E 'x265 \[info\]: global :.*SSIM Mean: [0-9]\.([0-9]{6})')
         rm -f ${tempVars[tempOutput]}
         tempVars+=([ssim]==$(echo "$SSIM" | sed -r "s/.*([0-9]{6}).*/\1/"))
         unset SSIM
@@ -862,7 +871,7 @@ while read -r FILE; do
     fi
 
     #tempVars+=([query]="${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
-    tempVars+=([query]="${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 ${tempVars[videoQuality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -6 dpl2 ${tempVars[audiobitrate]} -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
+    tempVars+=([query]="${options[handbrakecli]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265${tempVars[encoderType]} ${tempVars[videoQuality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -6 dpl2 ${tempVars[audiobitrate]} -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
     if [ "${options[parallel]}" -eq 1 ]; then
         log "Parallel encoding ${tempVars[filenameWithExtention]}."
         ffmpegParallel
