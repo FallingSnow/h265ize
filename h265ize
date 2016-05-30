@@ -1,977 +1,1633 @@
-#!/bin/bash
-
-# Check if running on a mac
-if [ "$(uname)" == "Darwin" ];then
-    isMac=true
-else
-    isMac=false
-fi
-
-# Check if bash is version 4+
-bashVersion=$(bash --version | grep -Eo "version [0-9]+\." | grep -o "[0-9]*")
-if [[ $bashVersion -lt 4 ]]; then
-    echo "Your bash is out of date, you must use at least version 4.";
-    echo "Your current bash major version is $bashVersion. Please update."
-    if $isMac; then
-        echo "Since you are on mac, it is recommened you use homebrew or fink to update your bash. See https://github.com/FallingSnow/h265ize/issues/6#issuecomment-158991841 for more info."
-    fi
-    exit 102
-fi
-
-if [ -e "settings" ]; then
-    source "settings"
-else
-    source "settings.default"
-fi
-
-# DO NOT TOUCH BELOW THIS LINE UNLESS YOU KNOW BASH
-################################################################################
-################################################################################
-
-declare -A options
-
-# Colors
-lbbg='\e[104m'
-bold='\e[0;01m'
-underscore='\e[0;04m'
-green='\e[0;32m'
-red='\e[0;31m'
-redBold='\e[0;31;01m'
-yellow='\e[0;33m'
-lightb='\e[1;34m'
-lightc='\e[1;36m'
-cyan='\e[0;36m'
-NC='\e[0m\e[0;00m' # No Color
-# End Colors
-
-# Commands
-# End Commands
-
-exclusivelySupportedExtensions="'*.mts' -o -iname '*.m2ts' -o -iname '*.mkv' -o -iname '*.m4v'" # Each extension should be seperated by -o -iname; example: '*.mkv' -o -iname '*.mp4'
-
-usage() {
-    echo $how 1>&2
-    exit 0
-}
-helps() {
-    echo -e "${underscore}Package${NC}: ${bold}$package${NC}"
-    echo -e "${underscore}Version${NC}: ${cyan}$version${NC}"
-    echo -e "${underscore}Description${NC}: $description"
-    echo -e "$how"
-    echo ""
-    echo -e "$commandDesciptions"
-    exit 0
-}
-versions() {
-    echo -e "${bold}$package${NC} version $version [Copyleft MIT Licence]"
-    exit 0
-}
-debug(){
-    msg="${green}[$package]${NC}: ${cyan}[Debug]${NC} $1"
-    toFile "$msg"
-    if [ ${options[debug]} -eq 1 ]; then echo -e "$msg"; fi
-}
-warn() {
-    msg="${yellow}[$package]$NC: $1"
-    toFile "$msg"
-    echo -e $2 "$msg"
-}
-verbose(){
-    msg="${1}[$package]${NC}: ${lightb}[Verbose]${NC} $2"
-    toFile "$msg"
-    if [ ${options[verbose]} -eq 1 ]; then echo -e "$msg"; fi
-}
-error() {
-    msg="${red}[$package]$NC: $1"
-    toFile "$msg"
-    echo -e "$msg"
-}
-log() {
-    msg="${green}[$package]$NC: $1"
-    toFile "$msg"
-    echo -e "$msg"
-}
-logNoPrefix() {
-    msg="$1"
-    toFile "$msg"
-    echo -e "$msg"
-}
-replace() {
-    echo -ne "\r\e[K$1"
-}
-toFile() {
-  if [ -n "${options[logFile]}" ]; then
-      echo -e "$1" | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g" >> "${options[logFile]}"
-  fi
-}
-
-# Test getopt
-if [ $($getopt --test; echo $?) -ne 4 ]; then
-    error "You have a bad getopt version! Please update getopt."
-    exit 74
-fi
-# Check if ffmpeg is installed
-hash "ffmpeg" 2>/dev/null || { error "ffmpeg is not installed. ffprobe must be installed!"; exit 5; }
-# Check if ffmpeg is installed
-hash "ffprobe" 2>/dev/null || { error "ffprobe is not installed. ffprobe must be installed!"; exit 6; }
-# Check if bc is installed
-hash "bc" 2>/dev/null || { error "bc is not installed. bc must be installed!"; exit 9; }
-
-flags=$($getopt -o :d:q:m:n:t:f:g:l:x:vphaou -l aspreset:,logfile:,stats,video-bitrate:,depth:,he-audio,he-downmix,copy-audio,debug,delete,help,version -- "$@")
-eval set -- "$flags"
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -a)
-            options[accurateTimestamps]=1
-            ;;
-        -d)
-            options[destination]="$2"; shift
-            ;;
-        -f)
-            options[outputFormat]="$2"; shift
-            ;;
-        -g)
-            options[tempDir]="$2"; shift
-            ;;
-        -l)
-            options[previewLength]="$2"; shift
-            ;;
-        -m)
-            options[preset]="$2"; shift
-            ;;
-        -n)
-            options[nativeLangCode]="$2"; shift
-            ;;
-        -o)
-            options[override]=1
-            ;;
-        -p)
-            options[preview]=1
-            ;;
-        -q)
-            options[quality]="$2"; shift
-            ;;
-        # -s)
-            # options[smart]=1
-            # ;;
-        -t)
-            options[tempName]="$2"; shift
-            ;;
-        -u)
-            options[upconvert]=0
-            ;;
-        -v)
-            options[verbose]=1
-            ;;
-        -x)
-            options[extraOptions]="$2:"; shift
-            ;;
-        --aspreset)
-            options[aspreset]="$2"; shift
-            ;;
-        --logfile)
-            options[logFile]="$2"; shift
-            ;;
-        --stats)
-            options[stats]=1
-            ;;
-        --delete)
-            warn "What are you crazy? What if this encode turns out like trash? You sure you really want to delete the source after you have finished encoding? STRONGLY NOT RECOMMENED [y/N]: " "-n"
-            while true; do
-                read yn
-                case $yn in
-                    [Yy]* ) options[delete]=1; break;;
-                    [Nn]* ) options[delete]=0; break;;
-                    * ) options[delete]=0; break;;
-                esac
-            done
-            ;;
-        --debug)
-            options[debug]=1
-            ;;
-        --depth)
-            options[depth]="$2"; shift
-            ;;
-        --video-bitrate)
-            options[vbr]="$2"; shift
-            ;;
-        --he-audio)
-            options[heaudio]=1
-            ;;
-        --he-downmix)
-            options[downmixHeaudio]=1
-            ;;
-        --copy-audio)
-            options[copyaudio]=1
-            warn "Audio is now copied by default."
-            ;;
-        # --smart)
-            # options[smart]=1
-            # ;;
-        # --multi-pass)
-            # options[multipass]=1
-            # ;;
-        -h)
-            dohelp=1
-            ;;
-        --help)
-            dohelp=1
-            ;;
-        --version)
-            doVersion=1
-            ;;
-        \?)
-            usage
-            ;;
-        --) shift; break;;
-        *)  break;;
-    esac
-    shift
-done
-
-# Check if a aspreset has been enabled
-if [ -n "${options[aspreset]}" ]; then
-    case "${options[aspreset]}" in
-        "basic")
-            defaults[quality]=19;defaults[preset]="medium";
-            ;;
-        "testing-anime")
-            defaults[quality]=19;defaults[preset]="medium";defaults+=([extraOptions]="allow-non-conformance:ref=8:bframes=8:rd=6:me=star:b-adapt=2:qg-size=64:rc-lookahead=40:scenecut=45:weightb=1:psy-rd=2.0");defaults[heaudio]=1
-            ;;
-        "testing-ssim")
-            defaults[quality]=19;defaults[preset]="medium";defaults+=([extraOptions]="tune=ssim:ssim:psy-rd=0")
-            ;;
-        *)
-            error "Unknown aspreset ${options[aspreset]}."
-            exit 101
-    esac
-fi
-
-# Merge options with defaults
-for index in "${!defaults[@]}";do
-    if [ ! -n "${options[$index]}" ];then
-        options[$index]="${defaults[$index]}"
-    fi
-done
-
-package="h265ize"
-description="Convert videos into x265 videos."
-version="0.3.1-1"
-commandDesciptions="${underscore}Basic Options${NC}:
-  ${cyan}-a${NC} :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
-  ${cyan}-d${NC} :(NO TRAILING SLASH) Folder to output files to; default: \$HOME/h265; current: ${yellow}${options[destination]}${NC}
-  ${cyan}-f${NC} :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
-  ${cyan}-g${NC} :(NO TRAILING SLASH) Directory where new unfinished file is stored; default: \$HOME/h265; current: ${yellow}${options[tempDir]}${NC}
-  ${cyan}-l${NC} :Seconds to be encoded in preview mode; default: 30; current: ${yellow}${options[previewLength]}${NC}
-  ${cyan}-m${NC} :x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
-  ${cyan}-n${NC} :Your native language; Examples: eng, fre, spa, dut; default: eng
-  ${cyan}-o${NC} :Override mode; Allows conversion of videos that are already encoded by the hevc codec
-  ${cyan}-p${NC} :Preview mode; Only processes the first ${yellow}${options[previewLength]}${NC} seconds
-  ${cyan}-q${NC} :0-51; Sets the qp quality target; default: 19
-  ${cyan}-t${NC} :Temporary name of the new unfinished file; Example: in-progress
-  ${cyan}-u${NC} :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
-  ${cyan}-v${NC} :Verbose mode; Display extra output
-  ${cyan}-x${NC} :Extra x265 options
-
-${underscore}Advanced Options${NC}:
-  ${cyan}--delete${NC} : Delete source after encoding is complete and replaces it with new encode; ${redBold}STRONGLY NOT RECOMMENED${NC}
-  ${cyan}--depth${NC} :How deap the search for files should go in subdirectories; default: 2
-  ${cyan}--debug${NC} :Debug mode; Print extra debugging information
-  ${cyan}--video-bitrate${NC} :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
-  ${cyan}--he-audio${NC} :High Efficiency audio mode
-  ${cyan}--he-downmix${NC} :Downmixes audio with more than 2.1 channels to stereo using Dolby Pro Logic II
-  ${cyan}--copy-audio${NC} :Don't encode the audio streams, just copy them
-  ${cyan}--stats${NC} :Creates a stats file at ${yellow}${options[destination]%/}/h265ize.stats${NC}
-  ${cyan}--logfile${NC} :Sets the logfile location for all output from h265ize; Example: ${yellow}${options[destination]%/}/h265ize.log${NC}
-  ${cyan}--aspreset${NC} :My personal presets; Possible values are listed below
-    ${bold}-${NC} [${cyan}basic${NC}]: Overall good preset, will always create high quality videos but may produce large files.
-    ${bold}-${NC} [${cyan}testing-ssim${NC}]: x265's native preset just in SSIM mode.
-    ${bold}-${NC} [${cyan}testing-anime${NC}]: A very good preset for all types of anime. Produces very good quality for a very small size. Warning: this preset creates a nonconformant, high latency encode.
-  ${cyan}--version${NC} :Displays information about h265ize; Example: $package version $version [Copyleft MIT Licence]
-
-${underscore}Other Options${NC}:
-  ${cyan}-h${NC} :Help; Show this help page
-  ${cyan}--help${NC} :Help; Show this help page"
-how="${underscore}Usage${NC}: ${yellow}$0 [-h(help)] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>{3}] [-t <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-a] [-o] [-p] [-u] [-v] [--debug] [--aspreset <preset>] [--depth <integer>] [--video-bitrate <integer>] [--delete] <file|directory> )${NC}"
-
-if [ "$dohelp" = 1 ]; then
-    helps
-elif [ "$doVersion" = 1 ]; then
-    versions
-fi
-
-# Debug
-debug "Options $(eval "printf '%0.s-' {1..$(($(tput cols) - 28))}")"
-for index in "${!options[@]}"; do
-    debug " key   : $index"
-    debug "value  : ${options[$index]}"
-done
-
-if [[ $EUID -eq 0 ]] && [[ ${options[delete]} -eq 1 ]]; then
-    error "This script may NOT run as root with the delete option enabled."
-    exit 403
-fi
-
-# Make sure output directory exists
-if [[ ! -d "${options[destination]}" ]]; then
-    warn "Output destination \"${options[destination]}\" does not exist. Would you like to create it? [y/N]: " "-n"
-    while true; do
-        read yn
-        case $yn in
-            [Yy]* ) mkdir -p "${options[destination]}"; break;;
-            [Nn]* ) exit 2;;
-            * ) exit 2;;
-        esac
-    done
-fi
-# Make sure temp output directory exists
-if [[ ! -d "${options[tempDir]}" ]]; then
-    warn "Temporary output destination \"${options[tempDir]}\" does not exist. Would you like to create it? [y/N]: " "-n"
-    while true; do
-        read yn
-        case $yn in
-            [Yy]* ) mkdir -p "${options[tempDir]}"; break;;
-            [Nn]* ) exit 2;;
-            * ) exit 2;;
-        esac
-    done
-fi
-
-# Check if both preview and upconvert modes are enabled, if so, disable upconvert
-if [ ${options[preview]} -eq 1 ] && [ ${options[upconvert]} -eq 1 ]; then
-    warn "Subtitles can not be upconverted in preview mode. Upconvert has been disabled."
-    options[upconvert]=0
-fi
-
-declare -A ICO3TONAME
-ICO3TONAME=(["aar"]="Afar" ["abk"]="Abkhazian" ["afr"]="Afrikaans" ["aka"]="Akan" ["alb"]="Albanian" ["amh"]="Amharic" ["ara"]="Arabic" ["arg"]="Aragonese" ["arm"]="Armenian" ["asm"]="Assamese" ["ava"]="Avaric" ["ave"]="Avestan" ["aym"]="Aymara" ["aze"]="Azerbaijani" ["bak"]="Bashkir" ["bam"]="Bambara" ["baq"]="Basque" ["bel"]="Belarusian" ["ben"]="Bengali" ["bih"]="Bihari languages" ["bis"]="Bislama" ["bos"]="Bosnian" ["bre"]="Breton" ["bul"]="Bulgarian" ["bur"]="Burmese" ["cat"]="Catalan; Valencian" ["cha"]="Chamorro" ["che"]="Chechen" ["chi"]="Chinese" ["chu"]="Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic" ["chv"]="Chuvash" ["cor"]="Cornish" ["cos"]="Corsican" ["cre"]="Cree" ["cze"]="Czech" ["dan"]="Danish" ["div"]="Divehi; Dhivehi; Maldivian" ["dut"]="Dutch; Flemish" ["dzo"]="Dzongkha" ["eng"]="English" ["epo"]="Esperanto" ["est"]="Estonian" ["ewe"]="Ewe" ["fao"]="Faroese" ["fij"]="Fijian" ["fin"]="Finnish" ["fre"]="French" ["fry"]="Western Frisian" ["ful"]="Fulah" ["geo"]="Georgian" ["ger"]="German" ["gla"]="Gaelic; Scottish Gaelic" ["gle"]="Irish" ["glg"]="Galician" ["glv"]="Manx" ["gre"]="Greek, Modern (1453-)" ["grn"]="Guarani" ["guj"]="Gujarati" ["hat"]="Haitian; Haitian Creole" ["hau"]="Hausa" ["heb"]="Hebrew" ["her"]="Herero" ["hin"]="Hindi" ["hmo"]="Hiri Motu" ["hrv"]="Croatian" ["hun"]="Hungarian" ["ibo"]="Igbo" ["ice"]="Icelandic" ["ido"]="Ido" ["iii"]="Sichuan Yi; Nuosu" ["iku"]="Inuktitut" ["ile"]="Interlingue; Occidental" ["ina"]="Interlingua (International Auxiliary Language Association)" ["ind"]="Indonesian" ["ipk"]="Inupiaq" ["ita"]="Italian" ["jav"]="Javanese" ["jpn"]="Japanese" ["kal"]="Kalaallisut; Greenlandic" ["kan"]="Kannada" ["kas"]="Kashmiri" ["kau"]="Kanuri" ["kaz"]="Kazakh" ["khm"]="Central Khmer" ["kik"]="Kikuyu; Gikuyu" ["kin"]="Kinyarwanda" ["kir"]="Kirghiz; Kyrgyz" ["kom"]="Komi" ["kon"]="Kongo" ["kor"]="Korean" ["kua"]="Kuanyama; Kwanyama" ["kur"]="Kurdish" ["lao"]="Lao" ["lat"]="Latin" ["lav"]="Latvian" ["lim"]="Limburgan; Limburger; Limburgish" ["lin"]="Lingala" ["lit"]="Lithuanian" ["ltz"]="Luxembourgish; Letzeburgesch" ["lub"]="Luba-Katanga" ["lug"]="Ganda" ["mac"]="Macedonian" ["mah"]="Marshallese" ["mal"]="Malayalam" ["mao"]="Maori" ["mar"]="Marathi" ["may"]="Malay" ["mlg"]="Malagasy" ["mlt"]="Maltese" ["mon"]="Mongolian" ["nau"]="Nauru" ["nav"]="Navajo; Navaho" ["nbl"]="Ndebele, South; South Ndebele" ["nde"]="Ndebele, North; North Ndebele" ["ndo"]="Ndonga" ["nep"]="Nepali" ["nno"]="Norwegian Nynorsk; Nynorsk, Norwegian" ["nob"]="Bokmål, Norwegian; Norwegian Bokmål" ["nor"]="Norwegian" ["nya"]="Chichewa; Chewa; Nyanja" ["oci"]="Occitan (post 1500); Provençal" ["oji"]="Ojibwa" ["ori"]="Oriya" ["orm"]="Oromo" ["oss"]="Ossetian; Ossetic" ["pan"]="Panjabi; Punjabi" ["per"]="Persian" ["pli"]="Pali" ["pol"]="Polish" ["por"]="Portuguese" ["pus"]="Pushto; Pashto" ["que"]="Quechua" ["roh"]="Romansh" ["rum"]="Romanian; Moldavian; Moldovan" ["run"]="Rundi" ["rus"]="Russian" ["sag"]="Sango" ["san"]="Sanskrit" ["sin"]="Sinhala; Sinhalese" ["slo"]="Slovak" ["slv"]="Slovenian" ["sme"]="Northern Sami" ["smo"]="Samoan" ["sna"]="Shona" ["snd"]="Sindhi" ["som"]="Somali" ["sot"]="Sotho, Southern" ["spa"]="Spanish; Castilian" ["srd"]="Sardinian" ["srp"]="Serbian" ["ssw"]="Swati" ["sun"]="Sundanese" ["swa"]="Swahili" ["swe"]="Swedish" ["tah"]="Tahitian" ["tam"]="Tamil" ["tat"]="Tatar" ["tel"]="Telugu" ["tgk"]="Tajik" ["tgl"]="Tagalog" ["tha"]="Thai" ["tib"]="Tibetan" ["tir"]="Tigrinya" ["ton"]="Tonga (Tonga Islands)" ["tsn"]="Tswana" ["tso"]="Tsonga" ["tuk"]="Turkmen" ["tur"]="Turkish" ["twi"]="Twi" ["uig"]="Uighur; Uyghur" ["ukr"]="Ukrainian" ["urd"]="Urdu" ["uzb"]="Uzbek" ["ven"]="Venda" ["vie"]="Vietnamese" ["vol"]="Volapük" ["wel"]="Welsh" ["wln"]="Walloon" ["wol"]="Wolof" ["xho"]="Xhosa" ["yid"]="Yiddish" ["yor"]="Yoruba" ["zha"]="Zhuang; Chuang" ["zul"]="Zulu" ["unk"]="Unknown" ["und"]="Unknown")
-
-DIRECTORY=${1%/}
-PARENTDIRECTORY="$(eval dirname \"$DIRECTORY\")"
-log "Finding videos..."
-if $isMac; then
-    FILES=$(find "$DIRECTORY" -maxdepth ${options[depth]} -type f -exec file -N -I -- {} + 2>/dev/null | sed -n 's!: video/[^:]*$!!p')
-else
-    FILES=$(find "$DIRECTORY" -maxdepth ${options[depth]} -type f -exec file -N -i -- {} + 2>/dev/null | sed -n 's!: video/[^:]*$!!p')
-fi
-EXCLUSIVEFILES=$(find "$DIRECTORY" -maxdepth ${options[depth]} -type f \( -iname $exclusivelySupportedExtensions \) 2>/dev/null)
-FILES=( "${FILES[@]}" "${EXCLUSIVEFILES[@]}" )
-IFS=$'\n'
-FILES=($(sort -du <<<"${FILES[*]}"))
-# ISOs are currently not supported
-#FFPROBE="ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000"
-if [ ! -n "$FILES" ]; then
-    error "No video files found."
-    exit 3;
-else
-    log "Found:"
-    logNoPrefix "$(printf ' - %s\n' "${FILES[@]}")"
-fi
-
-# http://stackoverflow.com/questions/9256644/identifying-received-signal-name-in-bash-shell-script
-trap_with_arg() {
-    func="$1" ; shift
-    for sig ; do
-        trap "$func $sig" "$sig"
-    done
-}
-cleanup() {
-    warn "$package did not end cleanly. Deleting temp file and extra files."
-    if [ ${options[debug]} -eq 1 ]; then
-        debug "Temporary output at ${tempVars[tempOutput]} has not been deleted because you are in debug mode."
-    else
-        rm -f "${tempVars[tempOutput]}"
-    fi
-    rm -f ${tempVars[cleanupFiles]}
-
-    exit 4
-}
-if [ -e "h265ize-parallel" ]; then
-    source "h265ize-parallel"
-fi
-mapSubtitles() {
-    if [ ${options[parallel]} = 0 ]; then
-        tempVars+=([ffmpegQuery]="ffmpeg -loglevel error -hide_banner -i \"${tempVars[tempOutput]}\" ${tempVars[additionalInputs]} -c copy -y ${tempVars[ffmpegVideoStreamMap]} ${tempVars[ffmpegAudioStreamMap]} ${tempVars[ffmpegHEAudio]} ${tempVars[ffmpegSubtitleStreamMap]} ${tempVars[ffmpegOtherStreamMap]} ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null &")
-        verbose $green "Setting subtitle names..."
-    else
-        # Mapping after a parallel merge
-        tempVars+=([ffmpegQuery]="ffmpeg -loglevel error -hide_banner ${tempVars[parallelPreviewMergeTiming]} -i ${tempVars[fileEscaped]} -i \"${tempVars[tempOutput]}\" -async 1000 -c copy ${tempVars[audio]} -y -map 1:0 ${tempVars[ffmpegAudioStreamMap]} ${tempVars[ffmpegSubtitleStreamMap]} ${tempVars[ffmpegOtherStreamMap]} ${tempVars[ffmpegSubtitlesMap]} \"${tempVars[output]}\" < /dev/null &")
-        verbose $green "Finishing up merge..."
-    fi
-
-    debug "${red}[Query]$NC ${tempVars[ffmpegQuery]}"
-    eval "${tempVars[ffmpegQuery]}"
-    wait $!
-
-    error="$?"
-    if [ "$error" -ne 0 ]; then
-        error "Ut oh. Ffmpeg exited with error code $error."
-        cleanup
-    fi
-
-    if [ -n "${tempVars[setNewDefault]}" ]; then
-        verbose $green "Removing any left over subtitle defaults..."
-        for b in $(seq $((${tempVars[onSubtitleNumber]}))); do
-            local subtitles+="--edit track:s$b --set flag-default=0 "
-        done
-
-        local query="mkvpropedit \"${tempVars[output]}\" $subtitles"
-        debug "${red}[Query]$NC $query"
-        eval "$query"
-
-        verbose $green "Setting new default subtitle..."
-        local query="mkvpropedit \"${tempVars[output]}\" --edit track:s${tempVars[setNewDefault]} --set flag-default=1 > /dev/null"
-        debug "${red}[Query]$NC $query"
-        eval "$query"
-    fi
-
-    rm -f ${tempVars[cleanupFiles]}
-}
-
-# Takes ${tempVars[query]}
-handbrakeFile() {
-    debug "${red}[Query]$NC $1"
-
-    echo -e "${green}[h265ize]${NC}: Handbraking..."
-
-    #while read line; do
-    #    echo "LINE: $line"
-    #    if [ -z "$($line | grep -E 'Encoding: task [0-9]* of [0-9]*, [0-9]{1,3}\.[0-9]{1,3} %' | awk -F' % ' '{print $1}' | awk -F', ' '{print $2}')"]; then
-    #        echo "FOUND YOU!";
-    #    fi
-    #done < <(eval "$1")
-
-    #$(strace -p1234 -s9999 -e write)
-    #while [ ps -p $! > /dev/null ]; do
-
-    #done
-
-    eval "$1 &"
-
-    wait $!
-
-    error=$?
-    if [ ! $? -eq 0 ]; then
-        error "Ut oh. Handbrake exited with error code $error."
-        cleanup
-    fi
-
-    echo -e "${green}[h265ize]${NC}: Handbraking Complete -----------------------------------------------"
-}
-
-# Takes ${tempVars[tempOutput]}
-upconvertSubtitles() {
-    if [ ${#vobSubtitlesTrackIds[@]} -lt 1 ] || [ ${options[upconvert]} -eq 0 ]; then
-        return
-    fi
-
-    # Check if mkvextract is installed
-    hash "mkvextract" 2>/dev/null || { warn "mkvextract(mkvtoolnix-cli) is not installed. mkvextract(mkvtoolnix-cli) must be installed to upconvert subtitles! Skipped upconverting vobsubs."; return; }
-    hash "vobsub2srt" 2>/dev/null || { warn "vobsub2srt is not installed. vobsub2srt must be installed to upconvert subtitles! Skipped upconverting vobsubs."; return; }
-
-    if [ "${options[preview]}" = 1 ]; then
-        warn "Upconverted subtitle triming for previews is currently not supported. The whole subtitle will be added to the preview."
-        # return
-    fi
-
-    verbose $green "Converting vobsub subtitles to srt subtitles..."
-
-    local tracks=""
-    for c in "${vobSubtitlesTrackIds[@]}"; do
-        tracks="$tracks $c:${1%.*}-vobsub$c"
-    done
-
-    debug "$red[Query]$NC mkvextract tracks \"$FILE\"$tracks"
-    eval "mkvextract tracks \"$FILE\"$tracks > /dev/null"
-    wait $!
-
-    for c in "${vobSubtitlesTrackIds[@]}"; do
-        eval "vobsub2srt ${1%.*}-vobsub$c"
-        wait $!
-        rm -f "${1%.*}-vobsub$c.sub"
-        rm -f "${1%.*}-vobsub$c.idx"
-    done
-
-    for c in "${vobSubtitlesTrackIds[@]}"; do
-        tempVars+=([cleanupFiles]="${1%.*}-vobsub$c.srt ${1%.*}-vobsub$c.sub ${1%.*}-vobsub$c.idx ")
-        tempVars+=([additionalInputs]="-i ${1%.*}-vobsub$c.srt ")
-    done
-}
-
-if [ "${options[heaudio]}" -eq 1 ] && [ "${options[downmixHeaudio]}" -eq 1 ]; then
-    warn "High Efficiency audio downmixing is still very much in beta, are you sure you want to try it? [Y/n]: " "-n"
-    while true; do
-        read yn
-        case $yn in
-            [Yy]* ) break;;
-            [Nn]* ) exit 15;;
-            * ) break;;
-        esac
-    done
-fi
-
-trap_with_arg cleanup INT TERM
-startTime=$(date +"%b %d %r") # Time since h265ize script was invoked
-scriptStart=$(date)
-verbose $green "Folder processing started on $yellow$startTime$NC"
-
-filesNotAcceptable=0
-
-while read -r FILE; do
-
-    # Make sure temp variables are clear
-    unset tempVars
-    declare -A tempVars
-
-    tempVars+=([filenameWithExtention]=$(basename "$FILE"))
-
-    debug "Preprocessing ${tempVars[filenameWithExtention]}..."
-    debug $(eval "printf '%0.s-' {1..$(($(tput cols) - 19))}")
-
-    if $isMac; then
-        tempVars[fileSize]=$(stat -n -f"%z" "$FILE")
-    else
-        tempVars[fileSize]=$(stat --printf="%s" "$FILE")
-    fi
-    tempVars[fileSize]=$(echo "scale=0; ${tempVars[fileSize]}/1000000" | bc)
-    tempVars+=([fileExtension]="${FILE##*.}")
-    tempVars+=([filename]=$(basename "${FILE%.*}"))
-    if [ "${FILE%/*}" == "$FILE" ]; then
-        tempVars[fileDir]="."
-    else
-        tempVars[fileDir]="${FILE%/*}"
-    fi
-    toBeRemoved=$(printf '%q' "$PARENTDIRECTORY")
-    tempVars+=([relativeDir]="${tempVars[fileDir]#$toBeRemoved}")
-    debug "File directory: ${tempVars[fileDir]}"
-    debug "Parent directory: $PARENTDIRECTORY"
-    debug "Resulting relative directory: ${tempVars[relativeDir]}"
-    tempVars+=([fileWithDir]="${FILE%.*}")
-    tempVars+=([fileEscaped]=$(printf '%q' "$FILE"))
-    tempVars+=([filenameEscaped]=$(printf '%q' "${tempVars[filename]}"))
-
-    if [ "${options[preview]}" -eq 1 ]; then
-        tempVars+=([previewSuffix]="-preview")
-    fi
-
-    debug "Destination: ${options[destination]}"
-    tempVars+=([outputDest]=${options[destination]%/})
-    tempVars+=([relativeDest]="${tempVars[relativeDir]#/}")
-    #echo -e "${lightb} RelativeDest: ${tempVars[relativeDest]}"
-    tempVars+=([outputFile]="${tempVars[filename]//\`/\'}${tempVars[previewSuffix]}.${options[outputFormat]}")
-    if [ -n "${tempVars[relativeDest]}" ]; then
-        tempVars+=([output]="${tempVars[outputDest]}/${tempVars[relativeDest]}/${tempVars[outputFile]}")
-    else
-        tempVars+=([output]="${tempVars[outputDest]}/${tempVars[outputFile]}")
-    fi
-    debug "Output: ${tempVars[output]}"
-    tempVars+=([tempDirEscaped]=$(printf '%q' "${options[tempDir]%/}"))
-    tempVars+=([tempOutput]="${tempVars[tempDirEscaped]}/${options[tempName]}-$RANDOM.${options[outputFormat]}")
-
-    tempVars+=([onSubtitleNumber]=0)
-    tempVars+=([onAudioNumber]=0)
-
-    log "Processing ${tempVars[filenameWithExtention]}..."
-    echo $(eval "printf '%0.s-' {1..$(tput cols)}")
-
-    # Check if output file already exists
-    if [ -e "${tempVars[output]}" ] && [ ! "${options[preview]}" -eq 1 ]; then
-        warn "${tempVars[output]} already exists. Skipping..."
-        continue
-    fi
-
-    # Get number of streams
-    tempVars+=([numStreams]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o '\[STREAM\]' | wc -l | awk '{print $1}'))
-    tempVars+=([numStreamsFromIndex]=$(expr ${tempVars[numStreams]} - 1))
-
-    # Get number of audio tracks
-    tempVars+=([numAudioTracks]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'codec_type=audio' | wc -l))
-    tempVars+=([audioTracks]=$(seq -s, $counter 1 ${tempVars[numAudioTracks]}))
-    tempVars+=([AudioCodecs]="")
-
-    # Get duration and size
-    eval $(ffprobe -loglevel quiet -show_format "$FILE" | grep -E '^duration=|^size=')
-    tempVars+=([duration]="$duration")
-    unset duration
-    tempVars+=([size]=$(echo "$size / 1000000" | bc)) # Size in MB
-    unset size
-    tempVars+=([formatedDuration]=$(echo "scale=2; ${tempVars[duration]} / 60" | bc)) # Time in minutes
-    tempVars+=([startDate]=$(date)) # Time encoding of file began
-    #divisor=`echo "$duration / 60 * .7" | bc`
-    #echo $divisor
-    #factor=`echo "$size / $divisor" | bc`
-    #echo $factor
-    #quality=`echo "scale=2; $factor" | bc`
-    #echo $quality
-    tempVars+=([formatedStartDate]=$(date -d"${tempVars[startDate]}" +"%m/%d %r"))
-    verbose $green "File encoding started at $yellow${tempVars[formatedStartDate]}$NC"
-    verbose $green "Duration: ${tempVars[formatedDuration]} Minutes (${tempVars[duration]} seconds)"
-    verbose $green "Size: ${tempVars[size]} MB"
-
-    addAudioCodecToVar(){
-        if [ -z "${tempVars[audioCodecs]}" ]; then
-            tempVars+=([audioCodecs]="$1")
-        else
-            tempVars[audioCodecs]="${tempVars[audioCodecs]},$1"
-        fi
+#!/usr/bin/env node
+
+"use strict";
+
+const optional = require('optional');
+const yargs = require('yargs');
+const _ = require("lodash");
+const winston = require("winston");
+const ffmpeg = require('fluent-ffmpeg');
+const mime = require('mime');
+const recursive = require('recursive-readdir');
+const colors = require('colors');
+const moment = require('moment');
+require("moment-duration-format");
+const filesize = require('filesize');
+const fs = require('fs-extra');
+const hasbin = require('hasbin');
+const math = require('mathjs');
+const stripAnsi = require('strip-ansi');
+
+const path = require('path');
+const os = require("os");
+const readline = require("readline");
+const spawn = require('child_process').spawn;
+
+const packageId = 'h265ize';
+const version = '0.4.0';
+const description = 'h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.';
+
+var userSettings = optional("settings.json") || {};
+
+// Parse Options ---------------------------------------------------------------
+
+var args = yargs
+    .usage(colors.underline('Usage:') + ' $0 [options] [file|directory]')
+    .options({
+        'd': {
+            alias: 'destination',
+            default: userSettings['destination'] || path.resolve(process.cwd(), 'h265'),
+            describe: 'Folder where encoded files are output.',
+            type: 'string',
+            normalize: true,
+            group: 'General:'
+        },
+        'g': {
+            alias: 'temp-directory',
+            default: userSettings['temp-directory'] || path.resolve(os.tmpdir(), packageId),
+            describe: 'Folder where files are stored during encoding.',
+            type: 'string',
+            normalize: true,
+            group: 'General:'
+        },
+        'log-file': {
+            default: userSettings['log-file'] || path.resolve(process.cwd(), 'log.txt'),
+            describe: 'Sets the log file location for all output from h265ize. Enable debug mode via the --debug flag to output to the log file.',
+            type: 'string',
+            normalize: true,
+            group: 'General:'
+        },
+        'm': {
+            alias: 'preset',
+            default: userSettings['preset'] || 'fast',
+            describe: 'x265 encoder preset.',
+            choices: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'],
+            type: 'string',
+            group: 'General:'
+        },
+        'as-preset': {
+            default: userSettings['as-preset'] || 'none',
+            describe: 'My personal presets. Descriptions of each preset\'s use and function can be found on the github page.',
+            choices: ['basic', 'testing-anime', 'testing-ssim', 'none'],
+            type: 'string',
+            group: 'Advanced:'
+        },
+        'n': {
+            alias: 'native-language',
+            default: userSettings['native-language'] || '',
+            describe: 'The native language used to select default audio and subtitles. You may use 3 letter or 2 letter ISO 639-2 Alpha-3/Alpha-2 codes or the full language name. Examples: [eng|en|English|jpn|ja|Japanese]',
+            type: 'string',
+            group: 'General:'
+        },
+        'f': {
+            alias: 'output-format',
+            default: userSettings['output-format'] || 'mkv',
+            describe: 'Output container format.',
+            choices: ['mkv', 'mp4', 'm4v'],
+            type: 'string',
+            group: 'General:'
+        },
+        'x': {
+            alias: 'extra-options',
+            default: userSettings['extra-options'] || '',
+            describe: 'Extra x265 options. Options can be found on the x265 options page.',
+            type: 'string',
+            group: 'Advanced:'
+        },
+        'q': {
+            alias: 'quality',
+            default: userSettings['quality'] || 19,
+            describe: 'Sets the qp quality target',
+            type: 'number',
+            group: 'General:'
+        },
+        'video-bitrate': {
+            default: userSettings['video-bitrate'] || 0,
+            describe: 'Sets the video bitrate, set to 0 to use qp rate control instead of a target bitrate.',
+            type: 'number',
+            group: 'Advanced:'
+        },
+        'l': {
+            alias: 'preview-length',
+            default: userSettings['preview-length'] || 30000,
+            describe: 'Milliseconds to encode in preview mode. Max is half the length of input video.',
+            type: 'number',
+            group: 'Advanced:'
+        },
+        'time-drift-limit': {
+            default: userSettings['time-drift-limit'] || 200,
+            describe: 'Milliseconds the finished encode is allowed to differ from the original\'s length.',
+            type: 'number',
+            group: 'Advanced:'
+        },
+        // 'depth': {
+        //     default: 2,
+        //     describe: 'How deep the search for video files should go in subdirectories.',
+        //     type: 'number',
+        //     group: 'Advanced:'
+        // },
+        'accurate-timestamps': {
+            default: userSettings['accurate-timestamps'] || false,
+            describe: 'Become blu-ray complient and reduce the max keyInt to the average frame rate.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'he-audio': {
+            default: userSettings['he-audio'] || false,
+            describe: 'Re-encode audio to opus at 48kb/s.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'force-he-audio': {
+            default: userSettings['force-he-audio'] || false,
+            describe: 'Convert all audio to HE format, including lossless formats.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'downmix-he-audio': {
+            default: userSettings['downmix-he-audio'] || false,
+            describe: 'Downmix he-audio opus to Dolby Pro Logic II at 96kb/s. Enables he-audio.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'o': {
+            alias: 'override',
+            default: userSettings['override'] || false,
+            describe: 'Enable override mode. Allows conversion of videos that are already encoded by the hevc codec.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'p': {
+            alias: 'preview',
+            default: userSettings['preview'] || false,
+            describe: 'Only encode a preview of the video starting at middle of video. See -l/--preview-length for more info.',
+            type: 'boolean',
+            group: 'General:'
+        },
+        'disable-upconvert': {
+            default: userSettings['disable-upconvert'] || false,
+            describe: 'Disable Upconvert. Stop converting Vobsub subs to srt. Only works with mkv\'s.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'stats': {
+            default: userSettings['stats'] || false,
+            describe: 'Output a stats file containing stats for each video converted.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'v': {
+            alias: 'verbose',
+            default: userSettings['verbose'] || false,
+            describe: 'Enables verbose mode. Prints extra information.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        '10bit': {
+            default: userSettings['10bit'] || false,
+            describe: 'Forces encoding videos in 10bit format (Useful for anime).',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        '12bit': {
+            default: userSettings['12bit'] || false,
+            describe: 'Forces encoding videos in 12bit format (Useful for anime).',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'screenshots': {
+            default: userSettings['screenshots'] || false,
+            describe: 'Take 6 screenshots at regular intervals throughout the finished encode.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'debug': {
+            default: userSettings['debug'] || false,
+            describe: 'Enables debug mode. Prints extra debugging information.',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'delete': {
+            default: userSettings['delete'] || false,
+            describe: 'Delete source after encoding is complete and replaces it with new encode. [DANGER]',
+            type: 'boolean',
+            group: 'Advanced:'
+        },
+        'test': {
+            default: userSettings['test'] || false,
+            describe: 'Puts h265ize in test mode. No files will be encoded.',
+            type: 'boolean',
+            group: 'Options:'
+        },
+        'help': {
+            describe: 'Displays help page.',
+            group: 'Options:'
+        },
+    })
+    .argv;
+
+
+// Enable Logger ---------------------------------------------------------------
+
+var logLevels = {
+    levels: {
+        error: 0,
+        warn: 1,
+        alert: 2,
+        info: 3,
+        verbose: 4,
+        debug: 5
+    },
+    colors: {
+        error: 'red',
+        warn: 'yellow',
+        alert: 'magenta',
+        info: 'white',
+        verbose: 'cyan',
+        debug: 'grey'
     }
+};
+var logLevel = args.debug ? 'debug' : args.verbose ? 'verbose' : 'info';
 
-    addAudioNameToVar() {
-        if [ -z "${tempVars[audioNames]}" ]; then
-            tempVars+=([audioNames]="$1")
-        else
-            temp=${tempVars[audioNames]}
-            unset tempVars[audioNames]
-            tempVars+=([audioNames]="$temp,$1")
-            unset temp
-        fi
+winston.addColors(logLevels.colors);
+var lastLineWasCleared = false;
+var logger = new(winston.Logger)({
+    levels: logLevels.levels,
+    transports: [
+        new(winston.transports.Console)({
+            level: logLevel,
+            colorize: true,
+            label: packageId,
+            prettyPrint: true,
+            // handleExceptions: true,
+            // humanReadableUnhandledException: true,
+            // timestamp: function() {
+            //     return Date.now();
+            // },
+            formatter: function(options) {
+                let packageId = options.level === 'error' ? colors[logLevels.colors['error']]('[' + options.label + ']') : colors.green('[' + options.label + ']');
+                let logLevel = (options.level === 'info' || options.level === 'error') ? '' : colors[logLevels.colors[options.level]]('[' + options.level + ']') + ' ';
+                return packageId + ': ' + logLevel +
+                    (undefined !== options.message ? options.message : '') +
+                    (options.meta && Object.keys(options.meta).length ? createListString(options.meta) : '');
+            }
+        }),
+    ],
+    filters: [
+        function(level, msg, meta) {
+            if (meta.__divider)
+                msg = msg + '\n' + '-'.repeat(process.stdout.columns);
+
+            delete meta.__clearLine;
+            delete meta.__divider;
+            return msg;
+        }
+    ],
+    rewriters: [
+        function(level, msg, meta) {
+            if (meta.__clearLine && lastLineWasCleared) {
+                readline.moveCursor(process.stdout, -1000, -1);
+                readline.clearLine(process.stdout, 0);
+                lastLineWasCleared = true;
+            }
+            else if (meta.__clearLine) {
+                lastLineWasCleared = true;
+            }
+            else {
+                lastLineWasCleared = false;
+            }
+
+            return meta;
+        }
+    ]
+});
+
+// Show help
+if (args.help) {
+    console.log(colors.underline('Package:'), colors.yellow(packageId), '\t', colors.underline('Version:'), colors.yellow(version));
+    console.log(colors.underline('Descriptions:'), description);
+    yargs.showHelp();
+    process.exit(0);
+}
+
+if (args.debug) {
+    logger.debug('Log file location:', args.logFile);
+    logger.add(winston.transports.File, {
+        filename: args.logFile,
+        level: logLevel,
+        label: packageId,
+        prettyPrint: true,
+        json: false,
+        timestamp: false,
+        formatter: function(options) {
+            let packageId = '[' + options.label + ']';
+            let logLevel = (options.level === 'info' || options.level === 'error') ? '' : '[' + options.level + ']' + ' ';
+            return stripAnsi(packageId + ': ' + logLevel +
+                (undefined !== options.message ? options.message : '') +
+                (options.meta && Object.keys(options.meta).length ? createListString(options.meta) : ''));
+        }
+    });
+}
+
+// Setup stats file ------------------------------------------------------------
+
+// var csvStream = csv
+//     .createWriteStream({headers: true})
+//     .transform(function(row){
+//         return {
+//           A: row.a,
+//           B: row.b
+//         };
+//     }),
+//     writableStream = fs.createWriteStream("my.csv");
+
+// Ensure directories exist ----------------------------------------------------
+
+// Check destination directory
+fs.ensureDir(args.destination, function(err) {
+    if (err) {
+        throw err;
     }
-
-    addAudioCodec(){ # $1=format $2=num_channels $3=bit_rate $4=bits_per_sample (flac only) $5=language
-        addAudioCodecToVar "copy"
+});
+// Check temp directory
+fs.ensureDir(args.tempDirectory, function(err) {
+    if (err) {
+        throw err;
     }
+});
 
-    declare -a subtitleNames
-    declare -a subtitleLanguages
-    vobSubtitlesTrackIds=()
-    tempVars+=([vobSubtitleNumber]=0)
+// Watch for unclean shutdowns -------------------------------------------------
 
-    for i in $(seq 0 ${tempVars[numStreamsFromIndex]}); do
+var temp = {
+    files: [],
+    commandQueue: []
+};
+process.on('SIGINT', function() {
+    readline.clearLine(process.stdout, 0);
+    readline.moveCursor(process.stdout, -1000, 0);
+    logger.warn('Caught signal interupt! Attempted to clean up.');
+    cleanUp(true);
+});
+process.on('uncaughtException', (err) => {
+    logger.error(err);
+    cleanUp(true);
+});
 
-        eval $(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep -E "codec_name|codec_type|bits_per_raw_sample|width|height|avg_frame_rate|channels")
-        #echo `[[$codec_type -eq "video"]]`
-        #debug "$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE")"
-        language=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:language" | sed -n -e 's/^.*language=//p')
-        title=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 -select_streams $i "$FILE" | grep "TAG:title" | sed -n -e 's/^.*title=//p')
-        if [ -z "$language" ]; then
-            language="unk"
-        fi
-        debug "Stream Index: $i    Title: $title    Language: $language    Codec: $codec_type"
+// Special Features ------------------------------------------------------------
 
 
-        if [ "$codec_type" = "video" ] && [ -n "${tempVars[videoSet]}" ]; then
-            warn "Multiple videos within single container detected. Handbrake only supports the first video within a container, so the rest will be skipped."
-        elif [ "$codec_type" = "video" ]; then
-            if [ -z "$width" ] || [ -z "$height" ]; then
-                warn "No width and/or height was detected for the input video. Your ffmpeg is most likely out of date. I recommend ffmpeg version 2.8.2."
-            fi
-            tempVars[videoSet]=1
-            tempVars+=([sourceWidth]="$width")
-            tempVars+=([sourceHeight]="$height")
 
-            # Floor frame rate to get keyInt (Bluray compliant and saves timings and faster seek times but increases size)
-            tempVars+=([keyInt]=$(echo "scale=0; $avg_frame_rate" | bc))
-            tempVars+=([frameRate]=$avg_frame_rate)
-            if [ $codec_name = "h265" ] || [ $codec_name = "hevc" ]; then
-                if [ ${options[override]} = 0 ]; then
-                    warn "Video is already encoded in h265. Skipping..."
-                    continue 2
-                fi
-            fi
-            tempVars+=([ffmpegVideoStreamMap]="-map 0:$i ")
+// Set aspreset values -----------------------------------------------------------
+logger.verbose('Setting as-preset options...');
 
-        elif [ "$codec_type" = "audio" ]; then
+var asPresetParams = {};
 
-            tempVars[onAudioNumber]=$((${tempVars[onAudioNumber]} + 1))
-            if [ ${tempVars[onAudioNumber]} = 1 ]; then
-                tempVars+=([defaultAudioLang]="$language")
-            fi
+switch (args.asPreset) {
+    case 'basic':
+        asPresetParams['preset'] = 'fast';
+        asPresetParams['quality'] = '19';
+        break;
 
-            if [ -z "$codec_name" ]; then
-                error "A codec was not provided for stream $i. Your ffmpeg (current: $(ffmpeg -version | head -n 1 | awk '{print $3}'), recommended: 2.8.2) is most likely out of date."
-                exit 999
-            fi
+    case 'testing-anime':
+        asPresetParams['preset'] = 'medium';
+        asPresetParams['quality'] = '19';
 
-            addAudioNameToVar "$title"
-            addAudioCodec $codec_name $channels $bit_rate $bits_per_raw_sample $language ${tempVars[onAudioNumber]}
+        let x265Options = 'allow-non-conformance:ref=8:bframes=8:rd=6:me=star:b-adapt=2:qg-size=64:rc-lookahead=40:scenecut=45:weightb=1:psy-rd=2.0';
 
-            tempVars+=([ffmpegAudioStreamMap]="-map 0:$i ")
-            if [ "${options[heaudio]}" -eq 1 ] && [ "$codec_name" != "flac" ]; then
-                debug "Adding High Efficiency Opus codec for audio stream ${tempVars[onAudioNumber]}."
-                if [ ${options[downmixHeaudio]} -eq 0 ] || [[ $channels -lt 3 ]]; then
-                    newBitrate=$(echo "scale=0; (96 * $channels) / 2" | bc)
-                else
-                    newBitrate="96"
-                    tempVars+=([ffmpegAudioStreamMap]="-ac 2 -af aresample=matrix_encoding=dplii ")
-                fi
-                tempVars+=([ffmpegAudioStreamMap]="-c:a:$(expr ${tempVars[onAudioNumber]} - 1) libopus -b:a:$(expr ${tempVars[onAudioNumber]} - 1) ${newBitrate}k ")
-                unset newBitrate
-            fi
+        addx265Options(x265Options);
+        break;
 
-        elif [ "$codec_type" = "subtitle" ]; then
-            subtitleLanguages+=("$language")
-            subtitleNames+=("$title")
-            tempVars[onSubtitleNumber]=$((${tempVars[onSubtitleNumber]} + 1))
-            debug "Subtitle #${tempVars[onSubtitleNumber]}"
-            debug "Language: $language     Default Audio: ${tempVars[defaultAudioLang]}    NativeLangCode: ${options[nativeLangCode]}"
-            if [ "$language" = "${options[nativeLangCode]}" ] || [ "$language" = "unk" ] || [ "$language" = "und" ]; then
-                if [[ ! "${tempVars[defaultAudioLang]}" =~ ${options[nativeLangCode]} ]]; then
-                    if [ -n "${tempVars[defaultSubtitle]}" ]; then
-                        verbose $yellow "Multiple potential default subtitles with language $language found. Using first potential subtitle."
+    case 'none':
+        break;
+
+    default:
+        logger.error('Unknown as-preset option', colors.yellow(args.asPreset) + '.');
+        process.exit(1);
+        break;
+}
+
+_.each(asPresetParams, function(val, key) {
+    ifNotSetByUserSet(key, val);
+});
+
+// Get Files -------------------------------------------------------------------
+
+var input = args._[0] || './';
+var videos = [];
+var rejectedVideos = {};
+var atLeastVerbose = Boolean(logLevels.levels[logger.transports.console.level] >= 4);
+
+var fileDescriptorStats;
+try {
+    fileDescriptorStats = fs.lstatSync(input);
+}
+catch (e) {
+    if (e.code === 'ENOENT') {
+        logger.error('Input', input, 'does not exist.');
+        return process.exit(0);
+    }
+    throw e;
+}
+
+// Check if input is a file
+if (fileDescriptorStats.isFile()) {
+    if (mime.lookup(input).startsWith('video/')) {
+        videos.push(input);
+        processVideos(videos);
+    }
+    else
+        logger.error('Input file', "\'" + input + "\'", 'is not a recognized file format.');
+}
+
+// Check if input is a directory
+else if (fileDescriptorStats.isDirectory()) {
+    // Get all files in directory
+    findVideos(input).then(function(videoPaths) {
+        logger.info('Folder encoding started at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")));
+        processVideos(videoPaths);
+    }).catch(function(err) {
+        logger.error(err);
+    });
+}
+
+
+// Process Videos --------------------------------------------------------------
+
+function processVideos(videos) {
+    if (videos.length > 0) {
+        let video = videos.shift();
+        let startTime = moment();
+
+        logger.info('Processing', path.basename(video) + "...", {
+            __divider: true
+        });
+        logger.info('Encoding started at', colors.yellow(startTime.format("ddd, h:mm A")));
+
+        processVideo(video).then(function() {
+            let endTime = moment();
+            let timeDiffMilliseconds = moment.duration(endTime.diff(startTime));
+            logger.info('Finished encoding at', colors.yellow(endTime.format("ddd, h:mm A")), '(' + moment.duration(timeDiffMilliseconds).humanize() + ')');
+            logger.debug('Finished encoding in', colors.yellow(timeDiffMilliseconds / 1000), 'seconds.');
+            processVideos(videos);
+        }).catch(function(err) {
+            logger.warn(err);
+            rejectedVideos[video] = err.message;
+            processVideos(videos);
+        });
+    }
+    else {
+        finished();
+    }
+}
+
+function processVideo(video) {
+    return new Promise(function(resolve, reject) {
+        logger.debug('Path:', video);
+
+        let pathData = path.parse(video);
+        pathData.filename = pathData.name + pathData.ext;
+        let command = new ffmpeg()
+            .input(video).videoCodec('libx265');
+
+        let inputCounter = 0;
+
+        let relativeDestinationDirectory = path.relative(path.dirname(input), pathData.dir);
+        let destinationDirectory = path.resolve(args.destination, relativeDestinationDirectory);
+        if (args.delete) {
+            destinationDirectory = path.dirname(video);
+        }
+
+        let fileName = pathData.name + (args.preview ? '-preview' : '') + '.' + args.outputFormat;
+        let fileOutput = path.resolve(destinationDirectory, fileName);
+        let tempOutput = path.resolve(args.tempDirectory, pathData.name + '.encoding-in-progress.' + args.outputFormat);
+        let originalMetadata;
+
+        // Check if output file already exists
+        if (!args.preview) {
+            try {
+                fs.accessSync(fileOutput, fs.F_OK);
+                logger.debug('File', colors.yellow(fileOutput), 'already exists.');
+                if (!args.delete)
+                    return reject({
+                        level: 'warn',
+                        message: 'Already encoded. Skipping...'
+                    });
+            }
+            catch (e) {}
+        }
+
+        // Get video data
+        let getMetadata = function(path) {
+            return new Promise(function(resolve, reject) {
+                logger.verbose('Getting video metadata...');
+                ffmpeg.ffprobe(path, function(err, metadata) {
+                    if (err) {
+                        logger.error(err.message);
+                        logger.debug('ffprobe error stack:', err.stack);
+                        return reject({
+                            level: 'error',
+                            message: 'FFPROBE_ERROR'
+                        });
+                    }
+
+                    logger.debug('Container data:', {
+                        duration: moment.duration(metadata.format.duration, 'seconds').format('hh:mm:ss', {
+                            trim: false,
+                            forceLength: true
+                        }),
+                        size: filesize(metadata.format.size)
+                    });
+
+                    resolve(metadata);
+                });
+            });
+        };
+
+
+        let processStreams = function(metadata) {
+            return new Promise(function(resolve, reject) {
+                logger.verbose('Resolving video streams...');
+
+                let videoStreams = [],
+                    audioStreams = [],
+                    subtitleStreams = [],
+                    otherStreams = [];
+
+                // Dissect each video stream
+                _.each(metadata.streams, function(stream) {
+                    logger.debug('Working on stream:', stream.index);
+                    stream.input = 0;
+
+                    // logger.debug(stream);
+
+                    if (!stream.codec_type) {
+                        logger.warn('A codec was not provided for stream ' + stream.index + '. Your ffmpeg is most likely out of date. At least version 2.8.2 is recommended.');
+                    }
+
+                    switch (stream.codec_type) {
+                        case 'video':
+                            if (stream.codec_name === 'hevc' && !args.override)
+                                return reject({
+                                    level: 'warn',
+                                    message: 'Already encoded in h265. Skipping... (use the --override flag to encode hevc videos)'
+                                });
+                            videoStreams.push(stream);
+                            break;
+                        case 'audio':
+                            audioStreams.push(stream);
+                            break;
+                        case 'subtitle':
+                            subtitleStreams.push(stream);
+                            break;
+                        default:
+                            otherStreams.push(stream);
+                            break;
+                    }
+                });
+
+                resolve({
+                    metadata: metadata,
+                    streams: {
+                        videoStreams: videoStreams,
+                        audioStreams: audioStreams,
+                        subtitleStreams: subtitleStreams,
+                        otherStreams: otherStreams
+                    }
+                });
+            });
+        };
+
+        let upconvert = function(data) {
+            return new Promise(function(resolve, reject) {
+                if (args.disableUpconvert || args.test)
+                    return resolve(data);
+
+                logger.verbose('Upconverting...');
+
+                let trackUpconvertProcesses = [];
+
+                // Here you can process all subtitles
+                _.each(data.streams.subtitleStreams, function(subtitle, i) {
+
+                    // Detect dvdsub subtitles
+                    if (subtitle.codec_name === 'dvdsub') {
+
+                        // Convert dvdsub subtitle to srt
+                        trackUpconvertProcesses.push(new Promise(function(resolve, reject) {
+                            extractTrack(video, subtitle.index).then(vobsubToSRT).then(function(filePath) {
+                                delete data.streams.subtitleStreams[i];
+                                command.input(filePath);
+                                subtitle.input = ++inputCounter;
+                                resolve();
+                            }).catch(reject);
+                        }));
+                    }
+                });
+
+                logger.debug('Upconverting', trackUpconvertProcesses.length, 'tracks.');
+                // Execute all upconvert processes
+                Promise.all(trackUpconvertProcesses).then(function() {
+                    resolve(data);
+                }).catch(reject);
+
+            });
+        };
+
+        let setVideoBitDepth = function(data) {
+            return new Promise(function(resolve, reject) {
+                logger.verbose('Setting video bit depth...');
+
+                // Video streams
+                let videoIndex = 0,
+                    videoBitDepth = 8;
+
+                if (data.streams.videoStreams.length > 1) {
+                    // TODO implement feature
+                    logger.alert('More than one video stream detected. Using the video stream with the greatest duration.');
+                    videoIndex = 0;
+                }
+                let videoStream = data.videoStream = data.streams.videoStreams[videoIndex];
+
+                // Check for 12bit or 10bit video
+                if (videoStream.pix_fmt.indexOf('12le') > -1 || videoStream.pix_fmt.indexOf('12be') > -1) {
+                    videoBitDepth = 12;
+                }
+                else if (videoStream.pix_fmt.indexOf('10le') > -1 || videoStream.pix_fmt.indexOf('10be') > -1) {
+                    videoBitDepth = 10;
+                }
+                data.videoBitDepth = videoBitDepth;
+
+                // Set video encoding profile
+                if (userSetOption('12bit')) {
+                    command.outputOptions('-pix_fmt', 'yuv420p12le');
+                }
+                else if (userSetOption('10bit')) {
+                    command.outputOptions('-pix_fmt', 'yuv420p10le');
+                }
+                else {
+                    switch (data.videoBitDepth) {
+                        case 16:
+                            command.outputOptions('-pix_fmt', 'yuv420p16le');
+                            break;
+                        case 14:
+                            command.outputOptions('-pix_fmt', 'yuv420p14le');
+                            break;
+                        case 12:
+                            command.outputOptions('-pix_fmt', 'yuv420p12le');
+                            break;
+                        case 10:
+                            command.outputOptions('-pix_fmt', 'yuv420p10le');
+                            break;
+                        default:
+                            command.outputOptions('-pix_fmt', 'yuv420p');
+                            break;
+                    }
+                }
+
+                resolve(data);
+            });
+        };
+
+        let mapStreams = function(data) {
+            return new Promise(function(resolve, reject) {
+                logger.verbose('Mapping streams...');
+                data.defaultAudioIndex = null;
+                data.defaultSubtitleIndex = null;
+
+                command.outputOptions('-map', data.videoStream.input + ':' + data.videoStream.index);
+                logger.debug('Video stream with index', data.videoStream.index, 'mapped.', {
+                    size: data.videoStream.width + 'x' + data.videoStream.height,
+                    codec: data.videoStream.codec_long_name,
+                    profile: data.videoStream.profile,
+                    'bit depth': data.videoBitDepth
+                });
+
+                // Handle native language detection and default audio track selection
+                _.each(data.streams.audioStreams, function(stream, i) {
+                    let normalizedLanguage = normalizeStreamLanguage(stream);
+                    if (normalizedLanguage === normalizeLanguage(args['native-language']) && !data.defaultAudioIndex) {
+                        data.defaultAudioIndex = stream.index;
+                    }
+                });
+
+                // Audio streams
+                _.each(data.streams.audioStreams, function(stream, i) {
+
+                    let audioTitle = getStreamTitle(stream);
+                    let normalizedLanguage = normalizeStreamLanguage(stream);
+
+                    command.outputOptions('-map', stream.input + ':' + stream.index);
+                    if (!(audioTitle)) {
+                        let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
+                        let newTitle = normalizedLanguage + ' ' + stream.codec_name.toUpperCase() + ((stream.profile && stream.profile !== 'unknown') ? (' ' + stream.profile) : '') + ' (' + channelsFormated + ')';
+                        logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
+                        command.outputOptions('-metadata:s:a:' + stream.index, 'title="' + newTitle);
+                    }
+
+                    // Set default audio
+                    if (data.defaultAudioIndex && data.defaultAudioIndex === stream.index) {
+                        command.outputOptions('-metadata:s:a:' + i, 'DISPOSITION:default=1');
+                    }
+
+                    let extraInfo = {
+                        title: audioTitle,
+                        language: normalizedLanguage,
+                        codec: stream.codec_long_name,
+                        channels: stream.channels
+                    };
+
+                    if (stream.profile)
+                        extraInfo.profile = stream.profile;
                     else
-                        verbose $green "Default audio language does not match native language and native language subtitle provided. Default subtitle set to native language or first unknown language subtitle."
-                        tempVars+=([defaultSubtitle]="--subtitle-default=${tempVars[onSubtitleNumber]}")
-                        tempVars+=([defaultSubtitleNum]=${tempVars[onSubtitleNumber]})
-                    fi
-                fi
-            fi
+                        extraInfo['bit-depth'] = stream.bits_per_raw_sample;
 
-            # Discover all subs in vobsub(dvdsub) format
-            if [ $codec_name = "dvdsub" ] && [ ${options[upconvert]} -eq 1 ]; then
-                tempVars[vobSubtitleNumber]=$((${tempVars[vobSubtitleNumber]} + 1))
-                vobSubtitlesTrackIds+=($i)
+                    logger.debug('Audio stream with index', stream.index, 'mapped.', extraInfo);
+                });
 
-                tempVars+=([ffmpegSubtitleStreamMap]="-map ${tempVars[vobSubtitleNumber]} ")
+                // Subtitle streams
+                _.each(data.streams.subtitleStreams, function(stream, i) {
 
-                if [ "${tempVars[defaultSubtitleNum]}" = "${tempVars[onSubtitleNumber]}" ]; then
-                    if [ "${options[outputFormat]}" = "mkv" ]; then
-                        if [ -z $(hash "mkvpropedit") ]; then
-                            tempVars+=([setNewDefault]=${tempVars[defaultSubtitleNum]})
+                    // Handle native language
+                    let normalizedLanguage = normalizeStreamLanguage(stream);
+                    if (normalizedLanguage === normalizeLanguage(args['native-language']) && !data.defaultAudioIndex && !data.defaultSubtitleIndex) {
+                        data.defaultSubtitleIndex = stream.index;
+                    }
+
+
+                    command.outputOptions('-map', stream.input + ':' + stream.index);
+                    if (!getStreamTitle(stream)) {
+                        logger.alert('Subtitle does not have a title. Title set to', normalizedLanguage + '.');
+                        command.outputOptions('-metadata:s:s:' + i, 'title=' + normalizedLanguage);
+                    }
+                    command.outputOptions('-metadata:s:s:' + i, 'DISPOSITION:default=0');
+                    logger.debug('Subtitle stream with index', stream.index, 'mapped.', {
+                        title: getStreamTitle(stream),
+                        language: normalizedLanguage,
+                        codec: stream.codec_long_name
+                    });
+                });
+
+                // Other streams (Attachments: fonts, pictures, etc.)
+                _.each(data.streams.otherStreams, function(stream, i) {
+                    command.outputOptions('-map', stream.input + ':' + stream.index);
+                    logger.debug('Other stream with index', stream.index, 'mapped.');
+                });
+
+                resolve(data);
+            });
+        };
+
+        let setArguments = function(data) {
+            return new Promise(function(resolve, reject) {
+                logger.verbose('Setting ffmpeg settings...');
+
+                // Preview Mode
+                if (args.preview) {
+                    command.seekInput(data.metadata.format.duration / 2).duration(args.previewLength / 1000);
+                }
+
+                // Set audio codec
+                command.audioCodec('copy');
+
+                // High Efficiency audio
+                if (args.heAudio) {
+                    _.each(data.streams.audioStreams, function(stream, i) {
+                        if (stream.codec_name !== 'flac' || args.forceHeAudio) {
+                            let bitrate = 64 * stream.channels / 2;
+                            command.outputOptions('-c:a:' + i, 'libopus');
+                            command.outputOptions('-b:a:' + i, bitrate + 'k');
+                            command.outputOptions('-frame_duration', 60);
+                            if (args.downmixHeAudio && stream.channels > 3) {
+                                // Downmix HE Audio
+                                command.audioChannels(2).audioFilters('aresample=matrix_encoding=dplii');
+                            }
+                        }
+                        else {
+                            logger.alert('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'won\'t be encoded with HE Audio because it is already in FLAC (lossless) format.');
+                        }
+                    });
+                }
+
+                // Accurate Timestamps
+                if (args.accurateTimestamps)
+                    addx265Options('keyint=' + math.eval(data.videoStream['avg_frame_rate']).toFixed(0));
+
+                // Set subtitle codec
+                command.outputOptions('-c:s', 'copy');
+
+                // Video bitrate target or constant quality?
+                if (args.videoBitrate) {
+                    command.videoBitrate(args.videoBitrate);
+                }
+                else {
+                    command.outputOptions('-x265-params', 'crf=' + args.quality);
+                }
+
+                // H265 preset
+                if (args.preset)
+                    command.outputOptions('-preset', args.preset);
+
+                // H265 extra options
+                if (args.x)
+                    command.outputOptions('-x265-params', args.x);
+
+                resolve(data);
+            });
+        };
+
+        let encodeVideo = function(data) {
+            return new Promise(function(resolve, reject) {
+                logger.verbose('Encoding video...');
+                let startTime = moment();
+
+                if (args.test)
+                    return reject({
+                        level: 'debug',
+                        message: 'Test mode! Skipping...'
+                    });
+
+
+
+                // Make output directory
+                if (!args.delete)
+                    fs.ensureDir(destinationDirectory, function(err) {
+                        if (err) {
+                            logger.warn(video, 'was unable to be encoded. The following error was given:');
+                            logger.warn(err);
+                        }
+                    });
+
+                let commandIndex;
+                let tempFileIndex;
+                let frameRate = math.eval(data.videoStream.avg_frame_rate);
+                if (!args.parallel) {
+                    commandIndex = temp.commandQueue.push(command);
+                    command.save(tempOutput);
+                }
+
+                command
+                    .on('progress', function(progress) {
+                        let precent = progress.percent ? progress.percent.toFixed(1) + '%' : '';
+                        let elapsed = moment().diff(startTime);
+                        let elapsedFormated = moment.duration(moment.duration(elapsed), 'seconds').format('hh:mm:ss', {
+                            trim: false,
+                            forceLength: true
+                        });
+                        // let speed = 'x' + getSpeedRatio(progress.timemark, elapsed);
+                        let speed = 'x' + (progress.currentFps / frameRate).toFixed(3);
+
+                        logger.info(colors.bgMagenta.white('[ffmpeg]'), 'Processing:', progress.currentFps + 'fps', precent, '[' + progress.timemark + ']', '|', colors.yellow(elapsedFormated), colors.yellow('[' + speed + ']'), {
+                            __clearLine: true
+                        });
+                    })
+                    .on('start', function(commandLine) {
+                        tempFileIndex = temp.files.push(tempOutput);
+                        logger.debug('Running Query:', commandLine);
+                    })
+                    .on('stdout', function(stderrLine) {
+                        logger.info(colors.bgMagenta.white('[ffmpeg]'), stderrLine, {
+                            __clearLine: true
+                        });
+                    })
+                    .on('end', function() {
+                        _.pullAt(temp.commandQueue, commandIndex);
+                        logger.verbose(pathData.filename, 'encoded.');
+                        resolve(tempFileIndex);
+                    })
+                    .on('error', function(err, stdout, stderr) {
+                        _.pullAt(temp.commandQueue, commandIndex);
+                        logger.debug(err.stack);
+
+                        if (err.message.startsWith('ffmpeg was killed with signal'))
+                            reject('ENDING');
                         else
-                            warn "mkvpropedit(mkvtoolnix-cli) is not installed. mkvpropedit(mkvtoolnix-cli) must be installed to set default subtitles! Skipped setting default subtitle."
-                        fi
-                    else
-                        warn "Yikes! It looks like the default subtitle is a vobsub I can fix that if you convert to an mkv instead!"
-                    fi
-                fi
-            else
-                tempVars+=([ffmpegSubtitleStreamMap]="-map 0:$i ")
-            fi
-        else
-            # Other codecs are just copied
-            tempVars+=([ffmpegOtherStreamMap]="-map 0:$i ")
-        fi
+                            reject({
+                                level: 'error',
+                                message: err.message
+                            });
+                    });
 
-        unset language
-        unset title
-        unset codec_name
-        unset codec_type
-        unset bits_per_raw_sample
-        unset width
-        unset height
-        unset avg_frame_rate
-        unset channels
+                if (args.parallel) {
+                    temp.commandQueue.push(command);
+                }
+            });
+        };
 
-    done
+        let verifyEncode = function(tempFileIndex) {
+            return new Promise(function(resolve, reject) {
+                logger.verbose('Verifying encoded video...');
 
-    verbose $green "Resolution: ${tempVars[sourceWidth]}x${tempVars[sourceHeight]}"
-    verbose $green "Audio Codecs: ${tempVars[audioCodecs]}"
-    verbose $green "Audio Tracks: ${tempVars[audioNames]}"
-
-    for i in "${!subtitleNames[@]}"; do
-        if [ -n "${subtitleNames[$i]}" ]; then
-            debug "Subtitle name was not empty."
-            tempVars[ffmpegSubtitlesMap]="${tempVars[ffmpegSubtitlesMap]} -metadata:s:s:$i title=\"${subtitleNames[$i]}\""
-        else
-            ico3=${subtitleLanguages[$i]}
-            tempVars[ffmpegSubtitlesMap]="${tempVars[ffmpegSubtitlesMap]} -metadata:s:s:$i title=\"${ICO3TONAME[$ico3]}\""
-            subtitleNames[$i]=${ICO3TONAME[$ico3]}
-            warn "Subtitle title was empty. Subtitle title changed to ${subtitleNames[$i]}."
-        fi
-    done
-
-    subtitleOutput=$(printf ",%s " "${subtitleNames[@]}")
-    verbose $green "Subtitle Tracks: ${subtitleOutput:1}"
-    unset subtitleOutput
-
-    unset subtitleLanguages
-    unset subtitleNames
-
-    if [ ! -z "${tempVars[audioNames]}" ]; then
-        tempVars[audioNames]="-A\"${tempVars[audioNames]}\""
-    else
-        tempVars[audioNames]=""
-    fi
-
-    # Get number of subtitle tracks
-    tempVars+=([numSubtitleTracks]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'codec_type=subtitle' | wc -l))
-    if [ "${tempVars[numSubtitleTracks]}" -gt 0 ]; then
-        tempVars+=([subtitleTracks]="--subtitle `seq -s, $counter 1 ${tempVars[numSubtitleTracks]}`")
-    else
-        tempVars+=([subtitleTracks]="")
-    fi
-
-    verbose $green "Subtitles: ${tempVars[subtitleTracks]}"
-
-    # Handle High Efficiency audio
-    if [ "${options[heaudio]}" -eq 1 ]; then
-        if [ ${options[downmixHeaudio]} -eq 1 ]; then
-            tempVars[ffmpegHEAudio]="-ac 2 -af aresample=matrix_encoding=dplii"
-        fi
-    fi
+                getMetadata(tempOutput).then(function(metadata) {
+                    logger.debug('Original Duration:', originalMetadata.format.duration, '\t', 'New Duration:', metadata.format.duration);
+                    let timeDiff = (originalMetadata.format.duration - metadata.format.duration) * 1000;
+                    if (timeDiff > args['time-diff-limit'] && !args.preview) {
+                        logger.warn('New encode is', moment.duration(timeDiff).format(), 'longer than the original. The max is', args['time-diff-limit'] + '.');
+                        fs.unlinkSync(tempOutput);
+                        return reject({
+                            level: 'error',
+                            message: 'Processed encode did not meet max time slippage requirements.'
+                        });
+                    }
+                    else {
+                        resolve({
+                            tempFileIndex: tempFileIndex,
+                            original: originalMetadata,
+                            new: metadata
+                        });
+                    }
+                });
+            });
+        };
 
 
-    # Find out if bit depth 10 or 8 should be used
-    tempVars+=([bitDepth10]=$(ffprobe -loglevel quiet -show_streams -probesize 10000000 -analyzeduration 10000000 "$FILE" | grep -o 'profile=High 10'))
+        let takeScreenshots = function(data) {
+            return new Promise(function(resolve, reject) {
+                if (!args.screenshots)
+                    return resolve(data);
 
-    if [ -n "${tempVars[bitDepth10]}" ]; then
-        tempVars+=([profile]="main10")
-        tempVars+=([handbrake]=${options[handbrakecli10bit]})
-    else
-        tempVars+=([profile]="main")
-        tempVars+=([handbrake]=${options[handbrakecli]})
-    fi
+                logger.verbose('Taking screenshots...');
 
-    # Check if handbrake is installed
-    hash "${tempVars[handbrake]}" 2>/dev/null || { error "${tempVars[handbrake]} is not installed. ${tempVars[handbrake]} must be installed!"; exit 7; }
+                let command = new ffmpeg(tempOutput);
+                let commandIndex = temp.commandQueue.push(command);
 
-    if [ ${options[accurateTimestamps]} -eq 1 ]; then
-        if [ -n "${options[extraOptions]}" ]; then
-            tempVars+=([extraOptions]="-x ${options[extraOptions]}:keyint=${tempVars[keyInt]}")
-        else
-            tempVars+=([extraOptions]="-x keyint=${tempVars[keyInt]}")
-        fi
-    elif [ -n "${options[extraOptions]}" ]; then
-        tempVars+=([extraOptions]="-x ${options[extraOptions]}")
-    fi
+                command
+                    .on('filenames', function(filenames) {
+                        if (filenames.length < 6)
+                            logger.alert('Only generating', colors.yellow(filenames.length), 'screenshots.');
+                    })
+                    .on('end', function() {
+                        _.pullAt(temp.commandQueue, commandIndex);
+                        resolve(data);
+                    });
 
-    tempVars[halfDuration]=$(echo "scale=6; ${tempVars[duration]} / 2" | bc)
-    if [ $(echo "scale=6; ${options[previewLength]} > ${tempVars[halfDuration]}" | bc) -eq 1 ] && [ ${options[preview]} -eq 1 ]; then
-        tempVars[previewLength]="${tempVars[halfDuration]}"
-        warn "Preview length can not be greater than half of the video's duration. Preview length temporarily set to ${tempVars[previewLength]}."
-    else
-        tempVars[previewLength]=${options[previewLength]}
-    fi
+                command.screenshots({
+                    filename: '%f-%i.png',
+                    folder: destinationDirectory,
+                    count: 6
+                });
 
-    if [ ${options[preview]} -eq 1 ]; then tempVars+=([startStop]="--start-at duration:$(echo "scale=0; ${tempVars[duration]} / 2" | bc) --stop-at duration:${tempVars[previewLength]}"); fi
+            });
+        };
 
-    verbose $green "Encoding Profile: ${tempVars[profile]}"
+        getMetadata(video)
 
-    if [ ${options[smart]} -eq 1 ]; then
-        # Make a copy of stdout
-        exec 5>&1
+        // Store original metadata
+        .then(function(metadata) {
+            return new Promise(function(resolve, reject) {
+                originalMetadata = metadata;
+                resolve(metadata);
+            });
+        })
 
-        # Get ssim rating
-        SSIM=$(eval "${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 25 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-tune=ssim --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} --start-at duration:$(echo "scale=0; ${tempVars[duration]} / 2" | bc) --stop-at duration:30 --modulus 2 -m -x aq-strength=1.0:${options[extraOptions]} --verbose=0 2>&1" | tee >(cat - >&5) | grep -E 'x265 \[info\]: global :.*SSIM Mean: [0-9]\.([0-9]{6})')
-        rm -f ${tempVars[tempOutput]}
-        tempVars+=([ssim]==$(echo "$SSIM" | sed -r "s/.*([0-9]{6}).*/\1/"))
-        unset SSIM
-        tempVars[output]="${tempVars[output]}.${tempVars[ssim]}"
-    fi
+        .then(processStreams)
+            .then(upconvert)
+            .then(setVideoBitDepth)
+            .then(mapStreams)
+            .then(setArguments)
+            .then(encodeVideo)
+            .then(verifyEncode)
+            .then(takeScreenshots)
+            .then(function(data) {
+                logger.info('Processing', pathData.name + '.' + args.outputFormat, 'complete.');
 
-    #for i in ${19...25}; do
-    #	echo "hi!"
-    #done
+                let ratio = (data.new.format.size / data.original.format.size * 100).toFixed(2);
+                logger.info('Original', colors.yellow(filesize(data.original.format.size)), '\t', 'New', colors.yellow(filesize(data.new.format.size)), '\t', 'Ratio', colors.yellow(ratio));
 
-    mkdir -p "${tempVars[output]%/*}"
+                if (args.delete)
+                    fs.removeSync(video);
+                if (args.preview)
+                    fs.removeSync(fileOutput);
+                logger.verbose('Moving file to final destination. Wait for transfer confirmation message!');
+                logger.debug('Output path:', fileOutput);
+                fs.move(tempOutput, fileOutput, function(err) {
+                    if (err)
+                        throw err;
 
-    if [ ${options[vbr]} -eq 0 ]; then
-        tempVars[videoQuality]="-q ${options[quality]}";
-    else
-        tempVars[videoQuality]="-b ${options[vbr]}";
-    fi
+                    logger.verbose(pathData.name + '.' + args.outputFormat, 'transfered successfully.');
+                    _.pullAt(temp.files, data.tempFileIndex);
+                    cleanUp();
+                });
 
-    #tempVars+=([query]="${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -f mkv -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 -q ${options[quality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} --subtitle ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --native-language=${options[nativeLangCode]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
-    tempVars+=([query]="${tempVars[handbrake]} -i ${tempVars[fileEscaped]} -o ${tempVars[tempOutput]} -w ${tempVars[sourceWidth]} -l ${tempVars[sourceHeight]} --previews 50 -e x265 ${tempVars[videoQuality]} --vfr -a ${tempVars[audioTracks]} --gain 0 --audio-fallback ac3 -6 dpl2 ${tempVars[audiobitrate]} -E ${tempVars[audioCodecs]} ${tempVars[audioNames]} ${tempVars[subtitleTracks]} ${tempVars[defaultSubtitle]} --encoder-profile=${tempVars[profile]} --encoder-preset=${options[preset]} ${tempVars[startStop]} --modulus 2 -m ${tempVars[extraOptions]} --verbose=0 < /dev/null")
-    if [ "${options[parallel]}" -eq 1 ]; then
-        log "Parallel encoding ${tempVars[filenameWithExtention]}."
-        ffmpegParallel
-        mergeSegments
-    else
-        handbrakeFile "${tempVars[query]}"
-    fi
+                resolve();
+            })
+            .catch(function(err) {
+                rejectedVideos[video] = err.message;
+                if (err === 'ENDING') {
+                    cleanUp(true);
+                }
+                else {
+                    logger[err.level](err.message);
+                    resolve();
+                }
+            });
+    });
+}
 
-    if [ "${options[parallel]}" -eq 1 ] && [ "${options[multipass]}" -eq 1 ]; then
-        error "Multipass encoding is not avaliable in parallel mode."
-        exit 765
-    elif [[ "${options[multipass]}" -eq 1 ]]; then
-        echo "multipass - meep - doesnt work"
-    fi
+function finished() {
 
-    tempVars+=([newDuration]=$(ffprobe -loglevel quiet -show_format "${tempVars[tempOutput]}" | grep 'duration' | sed 's/.*duration=\(.*\).*/\1/'))
-    if [ "${tempVars[newDuration]}" = "N/A" ] || [ ! -n "${tempVars[newDuration]}" ]; then
-        tempVars[newDuration]=0
-    fi
+    logger.info('Folder encoding finished at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")), {
+        __divider: true
+    });
+    if (_.keys(rejectedVideos).length)
+        logger.alert('The following videos', colors.yellow('(' + _.keys(rejectedVideos).length + ')'), 'were not encoded:', rejectedVideos);
 
-    tempVars+=([newDurationMax]=$(echo "${tempVars[duration]} + ${options[timeDiffLimit]}" | bc))
-    tempVars+=([newDurationMin]=$(echo "${tempVars[duration]} - ${options[timeDiffLimit]}" | bc))
-    tempVars+=([passMax]=$(echo "${tempVars[newDuration]} < ${tempVars[newDurationMax]}" | bc))
-    tempVars+=([passMin]=$(echo "${tempVars[newDuration]} > ${tempVars[newDurationMin]}" | bc))
-    verbose $green "Original Duration: ${lightb}${tempVars[duration]}$NC New Duration: ${lightb}${tempVars[newDuration]}$NC"
+}
 
-    if [ -n "${tempVars[duration]}" ] && [ 1 -eq "${tempVars[passMax]}" ] && [ 1 -eq "${tempVars[passMin]}" ] && [ "${options[preview]}" -ne 1 ]; then
-        if [ "${options[parallel]}" -eq 1 ]; then
-            mapSubtitles
-            rm -f "${tempVars[tempOutput]}"
-        elif [ -n "${tempVars[ffmpegSubtitlesMap]}" ] || [ "${options[heaudio]}" -eq 1 ]; then
-            upconvertSubtitles "${tempVars[tempOutput]}"
-            mapSubtitles
-            rm -f "${tempVars[tempOutput]}"
-        else
-            debug "Moving ${tempVars[tempOutput]} to ${tempVars[output]}"
-            mv "${tempVars[tempOutput]}" "${tempVars[output]}"
-        fi
-        log "${tempVars[filename]} encoded successfully."
+// Helper Functions ------------------------------------------------------------
 
-    elif [ "${options[preview]}" -eq 1 ] && [ $(echo "${tempVars[newDuration]}" | awk '{printf("%d\n",$0+=$0<0?0:0.9999999999999)}') -ne 0 ]; then
-        mkdir -p "${tempVars[output]%/*}"
-        if [ "${options[parallel]}" -eq 1 ] || [ "${options[heaudio]}" -eq 1 ]; then
-            mapSubtitles
-            rm -f "${tempVars[tempOutput]}"
-        elif [ ${tempVars[onSubtitleNumber]} -gt 0 ]; then
-            upconvertSubtitles "${tempVars[tempOutput]}"
-            mapSubtitles
-            rm -f "${tempVars[tempOutput]}"
-        else
-            mv "${tempVars[tempOutput]}" "${tempVars[output]}"
-        fi
-        log "Preview output in: ${tempVars[output]}"
+String.prototype.capitalize = function() {
+    return this.charAt(0).toUpperCase() + this.slice(1);
+};
 
-    else
-        badfile=1
-        filesNotAcceptable=$(($filesNotAcceptable + 1))
-        error "Ut oh. Duration of ${tempVars[filename]} is not within acceptable limits of the original file."
-        error "Bad file stored at ${tempVars[tempOutput]}."
+function getSpeedRatio(timemark, elapsed) {
 
-    fi
+    let hours = parseInt(timemark.substring(0, timemark.indexOf(':')), 10);
+    let minutes = parseInt(timemark.substring(timemark.indexOf(':') + 1, timemark.lastIndexOf(':')), 10);
+    let seconds = parseFloat(timemark.substr(timemark.lastIndexOf(':') + 1));
+    let secondsProcessed = hours * 60 * 60 + minutes * 60 + seconds;
+    let secondsElapsed = elapsed / 1000;
 
-    tempVars+=([endDate]=$(date)) # Time encoding of file ended
-    tempVars+=([formatedEndDate]=$(date -d"${tempVars[endDate]}" +"%m/%d %r"))
-    verbose $green "File encoding ended at $yellow${tempVars[formatedEndDate]}$NC"
-    tempVars+=([startSeconds]=$(date -d"${tempVars[startDate]}" +%s))
-    tempVars+=([endSeconds]=$(date -d"${tempVars[endDate]}" +%s))
-    tempVars+=([timeDifference]=$((${tempVars[endSeconds]}-${tempVars[startSeconds]})))
+    return (secondsProcessed / secondsElapsed).toFixed(3);
+}
 
-    verbose $green "File encoding time: $yellow$((${tempVars[timeDifference]} / 60))$NC minute(s) and $yellow$((${tempVars[timeDifference]} % 60))$NC second(s)"
+function userSetOption(option) {
+    let formattedOption;
+    if (option.length > 1) {
+        formattedOption = '--' + option;
+    }
+    else {
+        formattedOption = '-' + option;
+    }
 
-    if [ -z "$badfile" ]; then
-        if $isMac; then
-            tempVars[encodedFileSize]=$(stat -n -f"%z" "${tempVars[output]}")
-        else
-             tempVars[encodedFileSize]=$(stat --printf="%s" "${tempVars[output]}")
-        fi
-        if [ ${options[delete]} -eq 1 ] && [ ${options[preview]} -eq 0 ]; then
-            debug "Removing $FILE"
-            rm "$FILE"
-            debug "Moving ${tempVars[output]} to ${FILE%.*}"
-            mv "${tempVars[output]}" "${FILE%.*}.${options[outputFormat]}"
-        fi
+    if (process.argv.indexOf(option) > -1)
+        return true;
 
-        tempVars[encodedFileSize]=$(echo "scale=0; ${tempVars[encodedFileSize]}/1000000" | bc)
-        tempVars[sizeChange]=$(echo "scale=2; ${tempVars[encodedFileSize]}/${tempVars[fileSize]} * 100" | bc)
-        verbose $green "File size:   Old: $yellow${tempVars[fileSize]}${NC}MB    New: $yellow${tempVars[encodedFileSize]}${NC}MB ($yellow${tempVars[sizeChange]}${NC}%)"
+    // Handle aliases for same option
+    for (let aliasIndex in yargs.choices().parsed.aliases[option]) {
+        let alias = yargs.choices().parsed.aliases[option][aliasIndex];
+        let formattedAlias;
+        if (alias.length > 1) {
+            formattedAlias = '--' + alias;
+        }
+        else {
+            formattedAlias = '-' + alias;
+        }
 
-        if [ "${options[stats]}" = 1 ]; then
-            verbose $green "Writing stats to ${tempVars[outputDest]}/h265ize.stats"
-            $(echo "${tempVars[formatedEndDate]},${tempVars[filenameWithExtention]},${tempVars[fileSize]}MB,${tempVars[encodedFileSize]}MB,${tempVars[sizeChange]}%" >> "${tempVars[outputDest]}/h265ize.stats")
-        fi
+        if (process.argv.indexOf(formattedAlias) > -1) {
+            return true;
+        }
+    }
 
-    fi
+    return false;
+}
 
-    # Clear stdin because ffmpeg leaves input that will corrupt next command
-    #http://superuser.com/questions/276531/clear-stdin-before-reading
-    #read -t 1 -n 10000 discard
+function ifNotSetByUserSet(option, value) {
 
-    unset vobSubtitlesTrackIds
-    unset badfile
+    if (userSetOption(option))
+        return;
 
-done <<< "${FILES[*]}"
-endTime=$(date +"%b %d %r") # Time after all file have been encoded
-verbose $green "Folder processing ended on $yellow$endTime$NC"
-if [ $filesNotAcceptable != 0 ]; then
-    error "$filesNotAcceptable files had encoding errors/were encoded incorrectly, and therefore were not placed in the destination."
-fi
-log "Completed!"
+    args[option] = value;
 
-# Terminal, if you would ring please
-echo -e "\a"
+    // Handle aliases for same option
+    for (let aliasIndex in yargs.choices().parsed.aliases[option]) {
+        let alias = yargs.choices().parsed.aliases[option][aliasIndex];
+        args[alias] = value;
+    }
+}
+
+function createListString(files) {
+    if (Array.isArray(files))
+        return '\n\t- ' + files.join('\n\t- ');
+
+    let array = [];
+    _.each(files, function(value, key) {
+        array.push(colors.yellow(key) + ': ' + value);
+    });
+    return '\n\t- ' + array.join('\n\t- ');
+}
+
+function cleanUp(ending) {
+    logger.verbose('Cleaning up temp files...');
+    if (!args.debug) {
+        _.each(temp.files, function(file) {
+            try {
+                fs.unlinkSync(file);
+            }
+            catch (err) {
+                if (err.code !== 'ENOENT')
+                    logger.error(err);
+            }
+        });
+        temp.files.length = 0;
+    }
+    if (ending) {
+        if (temp.files.length)
+            logger.alert('The following temporary files were not deleted because you are in debug mode:', temp.files);
+
+        logger.info('Process exited.');
+        process.exit(0);
+
+        if (temp.commandQueue.length)
+            _.each(temp.commandQueue, function(command, i) {
+                command.kill();
+            });
+    }
+}
+
+
+function extractTrack(videoPath, trackIndex) {
+    return new Promise(function(resolve, reject) {
+        if (!hasbin.sync('mkvextract')) {
+            logger.warn('Upconvert skipped. mkvextract binary could not be located. Make sure you have it installed.');
+            return reject({
+                level: 'warn',
+                message: 'MKVEXTRACT_NOT_INSTALLED'
+            });
+        }
+        logger.debug('Extracting track', trackIndex, 'from', base);
+
+        let base = path.basename(videoPath);
+        let output = path.resolve(args.tempDirectory, base + '-track' + trackIndex);
+
+        spawn('mkvextract', ['track', trackIndex + ':' + output])
+            .on('close', (code) => {
+                if (code !== 0) {
+                    logger.warn('mkvextract exited with error code:', code);
+                    logger.warn('Skipping video', path.filename + '.');
+                    return reject({
+                        level: 'error',
+                        message: 'MKVEXTRACT_ERROR'
+                    });
+                }
+                resolve(output);
+            });
+
+    });
+}
+
+function addx265Options(options) {
+    args['x'] = options + (args['x'] ? (':' + args['x']) : '');
+    args['extra-options'] = options + (args['extra-options'] ? (':' + args['extra-options']) : '');
+}
+
+
+function vobsubToSRT(filePath) {
+    return new Promise(function(resolve, reject) {
+        if (!hasbin.sync('vobsub2srt')) {
+            logger.warn('Upconvert skipped. vobsub2srt binary could not be located. Make sure you have it installed.');
+            return reject({
+                level: 'warn',
+                message: 'VOBSUB2SRT_NOT_INSTALLED'
+            });
+        }
+        logger.debug('Converting', filePath, 'to srt file.');
+
+        spawn('vobsub2srt', [filePath])
+            .on('close', (code) => {
+                if (code !== 0) {
+                    logger.warn('vobsub2srt exited with error code:', code);
+                    logger.warn('Skipping video', path.filename + '.');
+                    return reject({
+                        level: 'error',
+                        message: 'VOBSUB2SRT_ERROR'
+                    });
+                }
+                resolve(filePath + '.srt');
+            });
+    });
+}
+
+function getStreamTitle(stream) {
+    return stream.title || stream.tags ? stream.tags.title : undefined;
+}
+
+function normalizeStreamLanguage(stream) {
+    let lang = stream.language || stream.tags ? stream.tags.language : undefined;
+    if (typeof lang === 'undefined')
+        return 'Unknown';
+
+    switch (lang.length) {
+        case 2:
+            return alpha2Languages[lang] || "Unknown";
+        case 3:
+            return alpha3Languages[lang] || "Unknown";
+        default:
+            return lang.capitalize() || "Unknown";
+    }
+}
+
+function normalizeLanguage(lang) {
+    if (typeof lang === 'undefined')
+        return '';
+
+    switch (lang.length) {
+        case 2:
+            return alpha2Languages[lang] || "Unknown";
+        case 3:
+            return alpha3Languages[lang] || "Unknown";
+        default:
+            return lang.capitalize() || "Unknown";
+    }
+}
+
+function findVideos(path) {
+    return new Promise(function(resolve, reject) {
+        recursive(path, function(err, files) {
+
+            // Handle any errors given while searching input directory
+            if (err) {
+                logger.debug('Error:', err);
+                if (err.code === 'ENOENT')
+                    return reject('File or directory ' + colors.yellow(input) + ' does not exist.');
+                else
+                    throw err;
+            }
+
+
+            // Check if each file is a video
+            _.each(files, function(file) {
+                if (mime.lookup(file).startsWith('video/'))
+                    videos.push(file);
+            });
+
+            // Files is an array of filename
+            logger.debug('Video files found: ', videos);
+
+            resolve(videos);
+        });
+    });
+}
+
+var alpha2Languages = {
+    "aa": "Afar",
+    "ab": "Abkhazian",
+    "ae": "Avestan",
+    "af": "Afrikaans",
+    "ak": "Akan",
+    "am": "Amharic",
+    "an": "Aragonese",
+    "ar": "Arabic",
+    "as": "Assamese",
+    "av": "Avaric",
+    "ay": "Aymara",
+    "az": "Azerbaijani",
+    "ba": "Bashkir",
+    "be": "Belarusian",
+    "bg": "Bulgarian",
+    "bh": "Bihari languages",
+    "bi": "Bislama",
+    "bm": "Bambara",
+    "bn": "Bengali",
+    "bo": "Tibetan",
+    "br": "Breton",
+    "bs": "Bosnian",
+    "ca": "Catalan; Valencian",
+    "ce": "Chechen",
+    "ch": "Chamorro",
+    "co": "Corsican",
+    "cr": "Cree",
+    "cs": "Czech",
+    "cu": "Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic",
+    "cv": "Chuvash",
+    "cy": "Welsh",
+    "da": "Danish",
+    "de": "German",
+    "dv": "Divehi; Dhivehi; Maldivian",
+    "dz": "Dzongkha",
+    "ee": "Ewe",
+    "el": "Greek: Modern (1453-)",
+    "en": "English",
+    "eo": "Esperanto",
+    "es": "Spanish; Castilian",
+    "et": "Estonian",
+    "eu": "Basque",
+    "fa": "Persian",
+    "ff": "Fulah",
+    "fi": "Finnish",
+    "fj": "Fijian",
+    "fo": "Faroese",
+    "fr": "French",
+    "fy": "Western Frisian",
+    "ga": "Irish",
+    "gd": "Gaelic; Scottish Gaelic",
+    "gl": "Galician",
+    "gn": "Guarani",
+    "gu": "Gujarati",
+    "gv": "Manx",
+    "ha": "Hausa",
+    "he": "Hebrew",
+    "hi": "Hindi",
+    "ho": "Hiri Motu",
+    "hr": "Croatian",
+    "ht": "Haitian; Haitian Creole",
+    "hu": "Hungarian",
+    "hy": "Armenian",
+    "hz": "Herero",
+    "ia": "Interlingua (International Auxiliary Language Association)",
+    "id": "Indonesian",
+    "ie": "Interlingue; Occidental",
+    "ig": "Igbo",
+    "ii": "Sichuan Yi; Nuosu",
+    "ik": "Inupiaq",
+    "io": "Ido",
+    "is": "Icelandic",
+    "it": "Italian",
+    "iu": "Inuktitut",
+    "ja": "Japanese",
+    "jv": "Javanese",
+    "ka": "Georgian",
+    "kg": "Kongo",
+    "ki": "Kikuyu; Gikuyu",
+    "kj": "Kuanyama; Kwanyama",
+    "kk": "Kazakh",
+    "kl": "Kalaallisut; Greenlandic",
+    "km": "Central Khmer",
+    "kn": "Kannada",
+    "ko": "Korean",
+    "kr": "Kanuri",
+    "ks": "Kashmiri",
+    "ku": "Kurdish",
+    "kv": "Komi",
+    "kw": "Cornish",
+    "ky": "Kirghiz; Kyrgyz",
+    "la": "Latin",
+    "lb": "Luxembourgish; Letzeburgesch",
+    "lg": "Ganda",
+    "li": "Limburgan; Limburger; Limburgish",
+    "ln": "Lingala",
+    "lo": "Lao",
+    "lt": "Lithuanian",
+    "lu": "Luba-Katanga",
+    "lv": "Latvian",
+    "mg": "Malagasy",
+    "mh": "Marshallese",
+    "mi": "Maori",
+    "mk": "Macedonian",
+    "ml": "Malayalam",
+    "mn": "Mongolian",
+    "mr": "Marathi",
+    "ms": "Malay",
+    "mt": "Maltese",
+    "my": "Burmese",
+    "na": "Nauru",
+    "nb": "Bokmål: Norwegian; Norwegian Bokmål",
+    "nd": "Ndebele: North; North Ndebele",
+    "ne": "Nepali",
+    "ng": "Ndonga",
+    "nl": "Dutch; Flemish",
+    "nn": "Norwegian Nynorsk; Nynorsk: Norwegian",
+    "no": "Norwegian",
+    "nr": "Ndebele: South; South Ndebele",
+    "nv": "Navajo; Navaho",
+    "ny": "Chichewa; Chewa; Nyanja",
+    "oc": "Occitan (post 1500); Provençal",
+    "oj": "Ojibwa",
+    "om": "Oromo",
+    "or": "Oriya",
+    "os": "Ossetian; Ossetic",
+    "pa": "Panjabi; Punjabi",
+    "pi": "Pali",
+    "pl": "Polish",
+    "ps": "Pushto; Pashto",
+    "pt": "Portuguese",
+    "qu": "Quechua",
+    "rm": "Romansh",
+    "rn": "Rundi",
+    "ro": "Romanian; Moldavian; Moldovan",
+    "ru": "Russian",
+    "rw": "Kinyarwanda",
+    "sa": "Sanskrit",
+    "sc": "Sardinian",
+    "sd": "Sindhi",
+    "se": "Northern Sami",
+    "sg": "Sango",
+    "si": "Sinhala; Sinhalese",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "sm": "Samoan",
+    "sn": "Shona",
+    "so": "Somali",
+    "sq": "Albanian",
+    "sr": "Serbian",
+    "ss": "Swati",
+    "st": "Sotho: Southern",
+    "su": "Sundanese",
+    "sv": "Swedish",
+    "sw": "Swahili",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "tg": "Tajik",
+    "th": "Thai",
+    "ti": "Tigrinya",
+    "tk": "Turkmen",
+    "tl": "Tagalog",
+    "tn": "Tswana",
+    "to": "Tonga (Tonga Islands)",
+    "tr": "Turkish",
+    "ts": "Tsonga",
+    "tt": "Tatar",
+    "tw": "Twi",
+    "ty": "Tahitian",
+    "ug": "Uighur; Uyghur",
+    "uk": "Ukrainian",
+    "ur": "Urdu",
+    "uz": "Uzbek",
+    "ve": "Venda",
+    "vi": "Vietnamese",
+    "vo": "Volapük",
+    "wa": "Walloon",
+    "wo": "Wolof",
+    "xh": "Xhosa",
+    "yi": "Yiddish",
+    "yo": "Yoruba",
+    "za": "Zhuang; Chuang",
+    "zh": "Chinese",
+    "zu": "Zulu",
+    "un": "Unknown",
+};
+var alpha3Languages = {
+    "aar": "Afar",
+    "abk": "Abkhazian",
+    "afr": "Afrikaans",
+    "aka": "Akan",
+    "alb": "Albanian",
+    "amh": "Amharic",
+    "ara": "Arabic",
+    "arg": "Aragonese",
+    "arm": "Armenian",
+    "asm": "Assamese",
+    "ava": "Avaric",
+    "ave": "Avestan",
+    "aym": "Aymara",
+    "aze": "Azerbaijani",
+    "bak": "Bashkir",
+    "bam": "Bambara",
+    "baq": "Basque",
+    "bel": "Belarusian",
+    "ben": "Bengali",
+    "bih": "Bihari languages",
+    "bis": "Bislama",
+    "bos": "Bosnian",
+    "bre": "Breton",
+    "bul": "Bulgarian",
+    "bur": "Burmese",
+    "cat": "Catalan; Valencian",
+    "cha": "Chamorro",
+    "che": "Chechen",
+    "chi": "Chinese",
+    "chu": "Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic",
+    "chv": "Chuvash",
+    "cor": "Cornish",
+    "cos": "Corsican",
+    "cre": "Cree",
+    "cze": "Czech",
+    "dan": "Danish",
+    "div": "Divehi; Dhivehi; Maldivian",
+    "dut": "Dutch; Flemish",
+    "dzo": "Dzongkha",
+    "eng": "English",
+    "epo": "Esperanto",
+    "est": "Estonian",
+    "ewe": "Ewe",
+    "fao": "Faroese",
+    "fij": "Fijian",
+    "fin": "Finnish",
+    "fre": "French",
+    "fry": "Western Frisian",
+    "ful": "Fulah",
+    "geo": "Georgian",
+    "ger": "German",
+    "gla": "Gaelic; Scottish Gaelic",
+    "gle": "Irish",
+    "glg": "Galician",
+    "glv": "Manx",
+    "gre": "Greek, Modern (1453-)",
+    "grn": "Guarani",
+    "guj": "Gujarati",
+    "hat": "Haitian; Haitian Creole",
+    "hau": "Hausa",
+    "heb": "Hebrew",
+    "her": "Herero",
+    "hin": "Hindi",
+    "hmo": "Hiri Motu",
+    "hrv": "Croatian",
+    "hun": "Hungarian",
+    "ibo": "Igbo",
+    "ice": "Icelandic",
+    "ido": "Ido",
+    "iii": "Sichuan Yi; Nuosu",
+    "iku": "Inuktitut",
+    "ile": "Interlingue; Occidental",
+    "ina": "Interlingua (International Auxiliary Language Association)",
+    "ind": "Indonesian",
+    "ipk": "Inupiaq",
+    "ita": "Italian",
+    "jav": "Javanese",
+    "jpn": "Japanese",
+    "kal": "Kalaallisut; Greenlandic",
+    "kan": "Kannada",
+    "kas": "Kashmiri",
+    "kau": "Kanuri",
+    "kaz": "Kazakh",
+    "khm": "Central Khmer",
+    "kik": "Kikuyu; Gikuyu",
+    "kin": "Kinyarwanda",
+    "kir": "Kirghiz; Kyrgyz",
+    "kom": "Komi",
+    "kon": "Kongo",
+    "kor": "Korean",
+    "kua": "Kuanyama; Kwanyama",
+    "kur": "Kurdish",
+    "lao": "Lao",
+    "lat": "Latin",
+    "lav": "Latvian",
+    "lim": "Limburgan; Limburger; Limburgish",
+    "lin": "Lingala",
+    "lit": "Lithuanian",
+    "ltz": "Luxembourgish; Letzeburgesch",
+    "lub": "Luba-Katanga",
+    "lug": "Ganda",
+    "mac": "Macedonian",
+    "mah": "Marshallese",
+    "mal": "Malayalam",
+    "mao": "Maori",
+    "mar": "Marathi",
+    "may": "Malay",
+    "mlg": "Malagasy",
+    "mlt": "Maltese",
+    "mon": "Mongolian",
+    "nau": "Nauru",
+    "nav": "Navajo; Navaho",
+    "nbl": "Ndebele, South; South Ndebele",
+    "nde": "Ndebele, North; North Ndebele",
+    "ndo": "Ndonga",
+    "nep": "Nepali",
+    "nno": "Norwegian Nynorsk; Nynorsk, Norwegian",
+    "nob": "Bokmål, Norwegian; Norwegian Bokmål",
+    "nor": "Norwegian",
+    "nya": "Chichewa; Chewa; Nyanja",
+    "oci": "Occitan (post 1500); Provençal",
+    "oji": "Ojibwa",
+    "ori": "Oriya",
+    "orm": "Oromo",
+    "oss": "Ossetian; Ossetic",
+    "pan": "Panjabi; Punjabi",
+    "per": "Persian",
+    "pli": "Pali",
+    "pol": "Polish",
+    "por": "Portuguese",
+    "pus": "Pushto; Pashto",
+    "que": "Quechua",
+    "roh": "Romansh",
+    "rum": "Romanian; Moldavian; Moldovan",
+    "run": "Rundi",
+    "rus": "Russian",
+    "sag": "Sango",
+    "san": "Sanskrit",
+    "sin": "Sinhala; Sinhalese",
+    "slo": "Slovak",
+    "slv": "Slovenian",
+    "sme": "Northern Sami",
+    "smo": "Samoan",
+    "sna": "Shona",
+    "snd": "Sindhi",
+    "som": "Somali",
+    "sot": "Sotho, Southern",
+    "spa": "Spanish; Castilian",
+    "srd": "Sardinian",
+    "srp": "Serbian",
+    "ssw": "Swati",
+    "sun": "Sundanese",
+    "swa": "Swahili",
+    "swe": "Swedish",
+    "tah": "Tahitian",
+    "tam": "Tamil",
+    "tat": "Tatar",
+    "tel": "Telugu",
+    "tgk": "Tajik",
+    "tgl": "Tagalog",
+    "tha": "Thai",
+    "tib": "Tibetan",
+    "tir": "Tigrinya",
+    "ton": "Tonga (Tonga Islands)",
+    "tsn": "Tswana",
+    "tso": "Tsonga",
+    "tuk": "Turkmen",
+    "tur": "Turkish",
+    "twi": "Twi",
+    "uig": "Uighur; Uyghur",
+    "ukr": "Ukrainian",
+    "urd": "Urdu",
+    "uzb": "Uzbek",
+    "ven": "Venda",
+    "vie": "Vietnamese",
+    "vol": "Volapük",
+    "wel": "Welsh",
+    "wln": "Walloon",
+    "wol": "Wolof",
+    "xho": "Xhosa",
+    "yid": "Yiddish",
+    "yor": "Yoruba",
+    "zha": "Zhuang; Chuang",
+    "zul": "Zulu"
+};
