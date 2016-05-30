@@ -44,13 +44,16 @@ yaourt vobsub2srt-git; \
 git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm install && chmod +x h265ize
 ```
 
+### Updating
+While in the h265ize directory run `git pull`.
+
 ## Usage
 `./h265ize [-h|--help] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--accurate-timestamps] [--disable-upconvert] [--debug] [--as-preset <preset>] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--delete] <file|directory>`
 
 ### Options
 > -d :Folder to output files to
 
-> -f :Container format to output; Options: mkv, mp4, m4v; default: mkv; NOTE: If you use mp4 and intend to encode to larger than 4GB, you must add the --large-file option to the QUERY variable.
+> -f :Container format to output; Options: mkv, mp4, m4v; default: mkv.
 
 > -g :Directory where new unfinished file is stored
 
@@ -69,6 +72,10 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 > -v :Verbose mode; Display extra output
 
 > -x :Extra x265 options. Options can be found on the [x265 options page](https://x265.readthedocs.org/en/default/cli.html)
+
+> --10bit :Forces encoding videos in 10bit format (Useful for anime)
+
+> --12bit :Forces encoding videos in 12bit format (Useful for anime)
 
 > --accurate-timestamps :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
 
@@ -90,7 +97,7 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 
 > --screenshots :Take 6 screenshots at regular intervals throughout the finished encode
 
-> --stats: Creates a stats file in the destination named h265ize.stats
+> --stats: Creates a stats file in the destination named h265ize.csv
 
 > --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
 
