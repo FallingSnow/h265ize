@@ -88,6 +88,8 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 
 > --he-downmix :If there are more than 2.1 audio channels, downmix them to stereo. **`he-audio` must also be enabled**
 
+> --screenshots :Take 6 screenshots at regular intervals throughout the finished encode
+
 > --stats: Creates a stats file in the destination named h265ize.stats
 
 > --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
