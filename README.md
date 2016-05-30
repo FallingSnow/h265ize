@@ -31,7 +31,7 @@ If you have any questions or the script isn't working for you, feel free to open
 - [vobsub2srt](https://github.com/ruediger/VobSub2SRT) - Used for upconverting subs, not necessary.
 
 ### Installation
-To install the script run the following command to download and make it executable.
+To install h265ize run the following command line to download and install.
 
 ##### Base Utility (Unix)
 ```
@@ -48,7 +48,7 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 While in the h265ize directory run `git pull`.
 
 ## Usage
-`./h265ize [-h|--help] [-d <string>] [-q <0|51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--accurate-timestamps] [--disable-upconvert] [--debug] [--as-preset <preset>] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--delete] <file|directory>`
+`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--screenshots] [--delete] <file|directory>`
 
 ### Options
 > -d :Folder to output files to
