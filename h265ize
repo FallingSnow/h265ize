@@ -429,26 +429,41 @@ catch (e) {
     throw e;
 }
 
+// Setup stats file ------------------------------------------------------------
 
-// Check if input is a file
-if (fileDescriptorStats.isFile()) {
-    if (mime.lookup(input).startsWith('video/')) {
-        videos.push(input);
-        processVideos(videos);
-    }
-    else
-        logger.error('Input file', "\'" + input + "\'", 'is not a recognized file format.');
-}
-
-// Check if input is a directory
-else if (fileDescriptorStats.isDirectory()) {
-    // Get all files in directory
-    findVideos(input).then(function(videoPaths) {
-        logger.info('Folder encoding started at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")));
-        processVideos(videoPaths);
-    }).catch(function(err) {
-        logger.error(err);
+var statsFile = false;
+if (args.stats)
+    loadStatsFile(path.resolve(process.cwd(), 'h265ize.csv')).then(function(stream) {
+        statsFile = stream;
+        processInput();
     });
+else
+    processInput();
+
+
+// Process file/directory ------------------------------------------------------
+
+function processInput() {
+    // Check if input is a file
+    if (fileDescriptorStats.isFile()) {
+        if (mime.lookup(input).startsWith('video/')) {
+            videos.push(input);
+            processVideos(videos);
+        }
+        else
+            logger.error('Input file', "\'" + input + "\'", 'is not a recognized file format.');
+    }
+
+    // Check if input is a directory
+    else if (fileDescriptorStats.isDirectory()) {
+        // Get all files in directory
+        findVideos(input).then(function(videoPaths) {
+            logger.info('Folder encoding started at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")));
+            processVideos(videoPaths);
+        }).catch(function(err) {
+            logger.error(err);
+        });
+    }
 }
 
 
@@ -859,7 +874,6 @@ function processVideo(video) {
                     });
 
                 let commandIndex;
-                let tempFileIndex;
                 let frameRate = math.eval(data.videoStream.avg_frame_rate);
                 if (!args.parallel) {
                     commandIndex = temp.commandQueue.push(command);
@@ -869,20 +883,20 @@ function processVideo(video) {
                 command
                     .on('progress', function(progress) {
                         let precent = progress.percent ? progress.percent.toFixed(1) + '%' : '';
-                        let elapsed = moment().diff(startTime);
-                        let elapsedFormated = moment.duration(moment.duration(elapsed), 'seconds').format('hh:mm:ss', {
+                        data.elapsed = moment().diff(startTime);
+                        data.elapsedFormated = moment.duration(moment.duration(data.elapsed), 'seconds').format('hh:mm:ss', {
                             trim: false,
                             forceLength: true
                         });
                         // let speed = 'x' + getSpeedRatio(progress.timemark, elapsed);
                         let speed = 'x' + (progress.currentFps / frameRate).toFixed(3);
 
-                        logger.info(colors.bgMagenta.white('[ffmpeg]'), 'Processing:', progress.currentFps + 'fps', precent, '[' + progress.timemark + ']', '|', colors.yellow(elapsedFormated), colors.yellow('[' + speed + ']'), {
+                        logger.info(colors.bgMagenta.white('[ffmpeg]'), 'Processing:', progress.currentFps + 'fps', precent, '[' + progress.timemark + ']', '|', colors.yellow(data.elapsedFormated), colors.yellow('[' + speed + ']'), {
                             __clearLine: true
                         });
                     })
                     .on('start', function(commandLine) {
-                        tempFileIndex = temp.files.push(tempOutput);
+                        data.tempFileIndex = temp.files.push(tempOutput);
                         logger.debug('Running Query:', commandLine);
                     })
                     .on('stdout', function(stderrLine) {
@@ -893,7 +907,7 @@ function processVideo(video) {
                     .on('end', function() {
                         _.pullAt(temp.commandQueue, commandIndex);
                         logger.verbose(pathData.filename, 'encoded.');
-                        resolve(tempFileIndex);
+                        resolve(data);
                     })
                     .on('error', function(err, stdout, stderr) {
                         _.pullAt(temp.commandQueue, commandIndex);
@@ -914,7 +928,7 @@ function processVideo(video) {
             });
         };
 
-        let verifyEncode = function(tempFileIndex) {
+        let verifyEncode = function(data) {
             return new Promise(function(resolve, reject) {
                 logger.verbose('Verifying encoded video...');
 
@@ -930,11 +944,14 @@ function processVideo(video) {
                         });
                     }
                     else {
-                        resolve({
-                            tempFileIndex: tempFileIndex,
-                            original: originalMetadata,
-                            new: metadata
-                        });
+                        data.ratio = (metadata.format.size / originalMetadata.format.size * 100).toFixed(2);
+                        data.original = originalMetadata;
+                        data.new = metadata;
+
+                        if (args.stats)
+                            appendToStatsFile([pathData.filename, filesize(originalMetadata.format.size), filesize(metadata.format.size), data.ratio + '%', data.elapsedFormated]);
+
+                        resolve(data);
                     }
                 });
             });
@@ -990,9 +1007,7 @@ function processVideo(video) {
             .then(takeScreenshots)
             .then(function(data) {
                 logger.info('Processing', pathData.name + '.' + args.outputFormat, 'complete.');
-
-                let ratio = (data.new.format.size / data.original.format.size * 100).toFixed(2);
-                logger.info('Original', colors.yellow(filesize(data.original.format.size)), '\t', 'New', colors.yellow(filesize(data.new.format.size)), '\t', 'Ratio', colors.yellow(ratio));
+                logger.info('Original', colors.yellow(filesize(data.original.format.size)), '\t', 'New', colors.yellow(filesize(data.new.format.size)), '\t', 'Reduction', colors.yellow(data.ratio + '%'));
 
                 if (args.delete)
                     fs.removeSync(video);
@@ -1032,6 +1047,7 @@ function finished() {
     if (_.keys(rejectedVideos).length)
         logger.alert('The following videos', colors.yellow('(' + _.keys(rejectedVideos).length + ')'), 'were not encoded:', rejectedVideos);
 
+    cleanUp(true);
 }
 
 // Helper Functions ------------------------------------------------------------
@@ -1122,6 +1138,8 @@ function cleanUp(ending) {
         temp.files.length = 0;
     }
     if (ending) {
+        if (statsFile)
+            statsFile.end();
         if (temp.files.length)
             logger.alert('The following temporary files were not deleted because you are in debug mode:', temp.files);
 
@@ -1256,6 +1274,27 @@ function findVideos(path) {
             resolve(videos);
         });
     });
+}
+
+function loadStatsFile(path) {
+    return new Promise(function(resolve, reject) {
+        fs.access(path, fs.F_OK, function(err) {
+            let stream = fs.createWriteStream('h265ize.csv', {
+                'flags': 'a'
+            });
+
+            if (err) {
+                stream.write('Filename,Original Size,New Size,Reduction,Encoding Time');
+            }
+
+            resolve(stream);
+        });
+    });
+}
+
+function appendToStatsFile(data) {
+    logger.debug('Writing to stats file:', data);
+    statsFile.write('\n' + data.join(','));
 }
 
 var alpha2Languages = {
