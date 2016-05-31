@@ -1,37 +1,39 @@
-#### Version 0.3.x => 0.4.x
+##### Updgrading to 0.4.x
 h265ize has experienced a major overhaul. Versions up to 0.3.x are written in bash and should work on most systems. Version 0.4.x onward requires nodejs in order to function.
 
 # h265ize
 h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.
 For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265ize/ "Ayrton Sparling").
 
-If you have any questions or the script isn't working for you, feel free to open an issue.
+If you have any questions or h265ize isn't working for you, feel free to open an issue.
 
 ## Features
+- Works on Windows, OSX, and Linux
 - Batch file processing (can process a whole folder)
 - Automatically detects video files (only processes video files found within a folder)
 - Detects all audio tracks
 - Preserves audio codecs
 - Preserves audio track titles
-- Preserves flac audio sample rate and bit depth (currently supports 44.1khz/16bit and 96khz/24bit, 24bit is popular in high quality anime)
 - Detects and preserves all subtitles
 - Detects audio language, if audio language is not your native language and native language subtitles are provided, makes those subtitle default
 - Automatically upconvert vobsub/dvdsubs to srt subtitles on mkv files
-- Detects bit depth and uses appropriate encoder profile (10-bit is common in high quality anime, supports 8-bit and 10-bit)
+- Detects bit depth and uses appropriate encoder profile (10-bit is common in high quality anime, supports 8-bit, 10-bit, 12-bit)
 - Verbose and preview mode
 - File override detection (doesn't accidentally write over a file that already exists, other than in preview mode)
 - Detects if file is already encoded in x265 and skips it
 - Ability to make encoding previews
+- Take screenshots of a finished encode
 - Faulty encoding detection based on before and after video durations
 - Maintains file structure in output folder (So in theory you could just take your 3tb movie folder and throw it into the script and the output folder should look that same but with x265 videos)
 
 ### Dependencies
+- [Node.js](https://nodejs.org/en/) - Required in order to run h265ize. **Necessary**.
 - [FFmpeg](https://www.ffmpeg.org/) - Does all the heavy lifting, including encoding. Also used for things like detecting timing, audio/video/subtitle tracks, languages, ect.. **Necessary**.
 - [mkvtoolnix](https://www.bunkus.org/videotools/mkvtoolnix/) - Used for upconverting subs in MKVs, not necessary.
 - [vobsub2srt](https://github.com/ruediger/VobSub2SRT) - Used for upconverting subs, not necessary.
 
 ### Installation
-To install h265ize run the following command line to download and install.
+To install h265ize run one of the following command lines to download and install.
 
 ##### Base Utility (Unix)
 ```
@@ -39,7 +41,7 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 ```
 ##### Arch Linux (Plus Dependencies)
 ```
-sudo pacman -S ffmpeg mkvtoolnix-cli; \
+sudo pacman -S ffmpeg nodejs; \
 yaourt vobsub2srt-git; \
 git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm install && chmod +x h265ize
 ```
@@ -65,7 +67,7 @@ While in the h265ize directory run `git pull`.
 
 > -o :Override mode; Allows conversion of videos that are already encoded by the hevc codec
 
-> -p :Preview mode; Only processes the first 30 seconds
+> -p :Preview mode; Only processe a 30 second preview
 
 > -q :Sets the qp quality target; default: 19
 
@@ -117,18 +119,13 @@ Run `h265ize --help` for more info.
 * `./h265izer -v -d /home -q 25 -g /home big_buck_bunny_folder`
 
 ## Stats file
-### Stats currently does not work on 0.4.x
-The stats file is located at the destination of the finished encoding under the name `h265ize.stats`. This must be enabled using the `--stats` flag. The file is composed of several lines. Each line is in the format
+The stats file is located at the current working directory under the name `h265ize.csv`. This must be enabled using the `--stats` flag. The file is composed of several lines. Each line is in the format
 
-`
-[Finish Encoding Date],[Filename],[Original Size in Megabytes],[Encoded size in Megabytes],[Compression Ratio]
-`
+`[Finish Encoding Date],[Filename],[Original Size],[Encoded size],[Compression Precent],[Encoding Duration]`
 
 For exmaple:
 
-`
-08/13 02:46:03 PM, [deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.00%
-`
+`08/13 02:46:03 PM, [deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.00%`
 
 ## Creating 10bit encodes
 Needs to be updated for version 0.4.x.

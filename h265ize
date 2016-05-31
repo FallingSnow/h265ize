@@ -949,7 +949,7 @@ function processVideo(video) {
                         data.new = metadata;
 
                         if (args.stats)
-                            appendToStatsFile([pathData.filename, filesize(originalMetadata.format.size), filesize(metadata.format.size), data.ratio + '%', data.elapsedFormated]);
+                            appendToStatsFile([moment.formet(), pathData.filename, filesize(originalMetadata.format.size), filesize(metadata.format.size), data.ratio + '%', data.elapsedFormated]);
 
                         resolve(data);
                     }
@@ -1284,7 +1284,7 @@ function loadStatsFile(path) {
             });
 
             if (err) {
-                stream.write('Filename,Original Size,New Size,Reduction,Encoding Time');
+                stream.write('Encoded Date,Filename,Original Size,New Size,Reduction,Duration');
             }
 
             resolve(stream);
