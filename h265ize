@@ -503,7 +503,16 @@ function processVideo(video) {
         let pathData = path.parse(video);
         pathData.filename = pathData.name + pathData.ext;
         let command = new ffmpeg()
-            .input(video).videoCodec('libx265');
+            .input(video);
+
+        // Set video codec
+        command.videoCodec('libx265');
+
+        // Set audio codec
+        command.audioCodec('copy');
+
+        // Set subtitle codec
+        command.outputOptions('-c:s', 'copy');
 
         let inputCounter = 0;
 
@@ -802,13 +811,11 @@ function processVideo(video) {
                     command.seekInput(data.metadata.format.duration / 2).duration(args.previewLength / 1000);
                 }
 
-                // Set audio codec
-                command.audioCodec('copy');
-
                 // High Efficiency audio
                 if (args.heAudio) {
                     _.each(data.streams.audioStreams, function(stream, i) {
                         if (stream.codec_name !== 'flac' || args.forceHeAudio) {
+                            logger.verbose('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'will be encoded to HE Audio.');
                             let bitrate = 64 * stream.channels / 2;
                             command.outputOptions('-c:a:' + i, 'libopus');
                             command.outputOptions('-b:a:' + i, bitrate + 'k');
@@ -816,6 +823,18 @@ function processVideo(video) {
                             if (args.downmixHeAudio && stream.channels > 3) {
                                 // Downmix HE Audio
                                 command.audioChannels(2).audioFilters('aresample=matrix_encoding=dplii');
+                                stream.channels = 2;
+                            }
+
+
+                            // Handle settings a new title
+                            let audioTitle = getStreamTitle(stream);
+                            let normalizedLanguage = normalizeStreamLanguage(stream);
+                            if (!(audioTitle)) {
+                                let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
+                                let newTitle = normalizedLanguage + ' OPUS (' + channelsFormated + ')';
+                                logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
+                                command.outputOptions('-metadata:s:a:' + stream.index, 'title="' + newTitle);
                             }
                         }
                         else {
@@ -827,9 +846,6 @@ function processVideo(video) {
                 // Accurate Timestamps
                 if (args.accurateTimestamps)
                     addx265Options('keyint=' + math.eval(data.videoStream['avg_frame_rate']).toFixed(0));
-
-                // Set subtitle codec
-                command.outputOptions('-c:s', 'copy');
 
                 // Video bitrate target or constant quality?
                 if (args.videoBitrate) {
@@ -1021,10 +1037,9 @@ function processVideo(video) {
 
                     logger.verbose(pathData.name + '.' + args.outputFormat, 'transfered successfully.');
                     _.pullAt(temp.files, data.tempFileIndex);
-                    cleanUp();
-                });
 
-                resolve();
+                    resolve();
+                });
             })
             .catch(function(err) {
                 rejectedVideos[video] = err.message;
