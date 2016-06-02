@@ -381,6 +381,7 @@ process.on('uncaughtException', (err) => {
 logger.verbose('Setting as-preset options...');
 
 var asPresetParams = {};
+var x265Options;
 
 switch (args.asPreset) {
     case 'basic':
@@ -392,13 +393,13 @@ switch (args.asPreset) {
         asPresetParams['preset'] = 'medium';
         asPresetParams['quality'] = '19';
 
-        let x265Options = 'allow-non-conformance:ref=8:bframes=8:rd=6:me=star:b-adapt=2:qg-size=64:rc-lookahead=40:scenecut=45:weightb=1:psy-rd=2.0';
+        x265Options = 'allow-non-conformance:ref=8:bframes=8:rd=6:me=star:b-adapt=2:qg-size=64:rc-lookahead=40:scenecut=45:weightb=1:psy-rd=2.0';
 
         addx265Options(x265Options);
         break;
 
     case 'testing-ssim':
-        let x265Options = 'tune=ssim:ssim:psy-rd=0';
+        x265Options = 'tune=ssim:ssim:psy-rd=0';
 
         addx265Options(x265Options);
         break;
