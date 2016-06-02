@@ -1306,7 +1306,7 @@ function loadStatsFile(path) {
             });
 
             if (err) {
-                stream.write('Encoded Date,Filename,Original Size,New Size,Precentage,Duration');
+                stream.write('Encoded Date,Filename,Original Size,New Size,Precentage,Duration of Encode');
             }
 
             resolve(stream);
