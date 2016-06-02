@@ -24,7 +24,7 @@ const readline = require("readline");
 const spawn = require('child_process').spawn;
 
 const packageId = 'h265ize';
-const version = '0.4.0';
+const version = '0.4.1';
 const description = 'h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.';
 
 var userSettings = optional("settings.json") || {};
@@ -1091,7 +1091,7 @@ function userSetOption(option) {
         formattedOption = '-' + option;
     }
 
-    if (process.argv.indexOf(option) > -1)
+    if (process.argv.indexOf(formattedOption) > -1)
         return true;
 
     // Handle aliases for same option

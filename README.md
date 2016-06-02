@@ -128,7 +128,7 @@ For exmaple:
 `08/13 02:46:03 PM, [deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.00%`
 
 ## Creating 10bit encodes
-Needs to be updated for version 0.4.x.
+To create 10bit or 12bit encodes, simply pass the `--10bit` or `--12bit` parameters respecively. You may need to install `x265_main10` and `x265_main12` (x265 main10 and main12 libraries) in order to encode in 10/12 bit.
 
 ### TODO
 - [ ] Audio normalization
