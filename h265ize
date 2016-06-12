@@ -17,215 +17,260 @@ const fs = require('fs-extra');
 const hasbin = require('hasbin');
 const math = require('mathjs');
 const stripAnsi = require('strip-ansi');
+const keypress = require('keypress');
 
 const path = require('path');
 const os = require("os");
 const readline = require("readline");
 const spawn = require('child_process').spawn;
 
-const packageId = 'h265ize';
-const version = '0.4.1';
-const description = 'h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.';
-
 var userSettings = optional("settings.json") || {};
+var packageSettings = require(path.resolve(__dirname, 'package.json'));
+
+var h265ize = {},
+    state = 'running';
+
+var args;
+
+h265ize.runCli = function() {
+    h265ize.parseOptions()
+        .then(h265ize.setupLogger)
+        .then(h265ize.handleKeypress)
+        .then(h265ize.watchSigInt)
+        .then(function() {
+            return h265ize.createDirectories(args.destination, args.tempDirectory);
+        })
+        .then(h265ize.processAsPreset)
+        .then(function() {
+            return h265ize.initStatsFile(path.resolve(process.cwd(), 'h265ize.csv'));
+        })
+        .then(function() {
+            return h265ize.processInput(args._[0] || './');
+        })
+        .then(h265ize.processVideos)
+        .then(h265ize.finished)
+        .catch(function(err) {
+            logger.error(err);
+        });
+};
 
 // Parse Options ---------------------------------------------------------------
 
-var args = yargs
-    .usage(colors.underline('Usage:') + ' $0 [options] [file|directory]')
-    .options({
-        'd': {
-            alias: 'destination',
-            default: userSettings['destination'] || path.resolve(process.cwd(), 'h265'),
-            describe: 'Folder where encoded files are output.',
-            type: 'string',
-            normalize: true,
-            group: 'General:'
-        },
-        'g': {
-            alias: 'temp-directory',
-            default: userSettings['temp-directory'] || path.resolve(os.tmpdir(), packageId),
-            describe: 'Folder where files are stored during encoding.',
-            type: 'string',
-            normalize: true,
-            group: 'General:'
-        },
-        'log-file': {
-            default: userSettings['log-file'] || path.resolve(process.cwd(), 'log.txt'),
-            describe: 'Sets the log file location for all output from h265ize. Enable debug mode via the --debug flag to output to the log file.',
-            type: 'string',
-            normalize: true,
-            group: 'General:'
-        },
-        'm': {
-            alias: 'preset',
-            default: userSettings['preset'] || 'fast',
-            describe: 'x265 encoder preset.',
-            choices: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'],
-            type: 'string',
-            group: 'General:'
-        },
-        'as-preset': {
-            default: userSettings['as-preset'] || 'none',
-            describe: 'My personal presets. Descriptions of each preset\'s use and function can be found on the github page.',
-            choices: ['basic', 'anime', 'testing-ssim', 'none'],
-            type: 'string',
-            group: 'Advanced:'
-        },
-        'n': {
-            alias: 'native-language',
-            default: userSettings['native-language'] || '',
-            describe: 'The native language used to select default audio and subtitles. You may use 3 letter or 2 letter ISO 639-2 Alpha-3/Alpha-2 codes or the full language name. Examples: [eng|en|English|jpn|ja|Japanese]',
-            type: 'string',
-            group: 'General:'
-        },
-        'f': {
-            alias: 'output-format',
-            default: userSettings['output-format'] || 'mkv',
-            describe: 'Output container format.',
-            choices: ['mkv', 'mp4', 'm4v'],
-            type: 'string',
-            group: 'General:'
-        },
-        'x': {
-            alias: 'extra-options',
-            default: userSettings['extra-options'] || '',
-            describe: 'Extra x265 options. Options can be found on the x265 options page.',
-            type: 'string',
-            group: 'Advanced:'
-        },
-        'q': {
-            alias: 'quality',
-            default: userSettings['quality'] || 19,
-            describe: 'Sets the qp quality target',
-            type: 'number',
-            group: 'General:'
-        },
-        'video-bitrate': {
-            default: userSettings['video-bitrate'] || 0,
-            describe: 'Sets the video bitrate, set to 0 to use qp rate control instead of a target bitrate.',
-            type: 'number',
-            group: 'Advanced:'
-        },
-        'l': {
-            alias: 'preview-length',
-            default: userSettings['preview-length'] || 30000,
-            describe: 'Milliseconds to encode in preview mode. Max is half the length of input video.',
-            type: 'number',
-            group: 'Advanced:'
-        },
-        'time-drift-limit': {
-            default: userSettings['time-drift-limit'] || 200,
-            describe: 'Milliseconds the finished encode is allowed to differ from the original\'s length.',
-            type: 'number',
-            group: 'Advanced:'
-        },
-        // 'depth': {
-        //     default: 2,
-        //     describe: 'How deep the search for video files should go in subdirectories.',
-        //     type: 'number',
-        //     group: 'Advanced:'
-        // },
-        'accurate-timestamps': {
-            default: userSettings['accurate-timestamps'] || false,
-            describe: 'Become blu-ray complient and reduce the max keyInt to the average frame rate.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'he-audio': {
-            default: userSettings['he-audio'] || false,
-            describe: 'Re-encode audio to opus at 48kb/s.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'force-he-audio': {
-            default: userSettings['force-he-audio'] || false,
-            describe: 'Convert all audio to HE format, including lossless formats.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'downmix-he-audio': {
-            default: userSettings['downmix-he-audio'] || false,
-            describe: 'Downmix he-audio opus to Dolby Pro Logic II at 96kb/s. Enables he-audio.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'o': {
-            alias: 'override',
-            default: userSettings['override'] || false,
-            describe: 'Enable override mode. Allows conversion of videos that are already encoded by the hevc codec.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'p': {
-            alias: 'preview',
-            default: userSettings['preview'] || false,
-            describe: 'Only encode a preview of the video starting at middle of video. See -l/--preview-length for more info.',
-            type: 'boolean',
-            group: 'General:'
-        },
-        'disable-upconvert': {
-            default: userSettings['disable-upconvert'] || false,
-            describe: 'Disable Upconvert. Stop converting Vobsub subs to srt. Only works with mkv\'s.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'stats': {
-            default: userSettings['stats'] || false,
-            describe: 'Output a stats file containing stats for each video converted.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'v': {
-            alias: 'verbose',
-            default: userSettings['verbose'] || false,
-            describe: 'Enables verbose mode. Prints extra information.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        '10bit': {
-            default: userSettings['10bit'] || false,
-            describe: 'Forces encoding videos in 10bit format (Useful for anime).',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        '12bit': {
-            default: userSettings['12bit'] || false,
-            describe: 'Forces encoding videos in 12bit format (Useful for anime).',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'screenshots': {
-            default: userSettings['screenshots'] || false,
-            describe: 'Take 6 screenshots at regular intervals throughout the finished encode.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'debug': {
-            default: userSettings['debug'] || false,
-            describe: 'Enables debug mode. Prints extra debugging information.',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'delete': {
-            default: userSettings['delete'] || false,
-            describe: 'Delete source after encoding is complete and replaces it with new encode. [DANGER]',
-            type: 'boolean',
-            group: 'Advanced:'
-        },
-        'test': {
-            default: userSettings['test'] || false,
-            describe: 'Puts h265ize in test mode. No files will be encoded.',
-            type: 'boolean',
-            group: 'Options:'
-        },
-        'help': {
-            describe: 'Displays help page.',
-            group: 'Options:'
-        },
-    })
-    .argv;
+h265ize.parseOptions = function() {
+    return new Promise(function(resolve, reject) {
+        args = yargs
+            .usage(colors.underline('Usage:') + ' $0 [options] [file|directory]')
+            .options({
+                'd': {
+                    alias: 'destination',
+                    default: userSettings['destination'] || path.resolve(process.cwd(), 'h265'),
+                    describe: 'Folder where encoded files are output.',
+                    type: 'string',
+                    normalize: true,
+                    group: 'General:'
+                },
+                'g': {
+                    alias: 'temp-directory',
+                    default: userSettings['temp-directory'] || path.resolve(os.tmpdir(), packageSettings.name),
+                    describe: 'Folder where files are stored during encoding.',
+                    type: 'string',
+                    normalize: true,
+                    group: 'General:'
+                },
+                'log-file': {
+                    default: userSettings['log-file'] || path.resolve(process.cwd(), 'log.txt'),
+                    describe: 'Sets the log file location for all output from h265ize. Enable debug mode via the --debug flag to output to the log file.',
+                    type: 'string',
+                    normalize: true,
+                    group: 'General:'
+                },
+                'm': {
+                    alias: 'preset',
+                    default: userSettings['preset'] || 'fast',
+                    describe: 'x265 encoder preset.',
+                    choices: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'],
+                    type: 'string',
+                    group: 'General:'
+                },
+                'as-preset': {
+                    default: userSettings['as-preset'] || 'none',
+                    describe: 'My personal presets. Descriptions of each preset\'s use and function can be found on the github page.',
+                    choices: ['basic', 'anime', 'testing-ssim', 'none'],
+                    type: 'string',
+                    group: 'Advanced:'
+                },
+                'n': {
+                    alias: 'native-language',
+                    default: userSettings['native-language'] || '',
+                    describe: 'The native language used to select default audio and subtitles. You may use 3 letter or 2 letter ISO 639-2 Alpha-3/Alpha-2 codes or the full language name. Examples: [eng|en|English|jpn|ja|Japanese]',
+                    type: 'string',
+                    group: 'General:'
+                },
+                'f': {
+                    alias: 'output-format',
+                    default: userSettings['output-format'] || 'mkv',
+                    describe: 'Output container format.',
+                    choices: ['mkv', 'mp4', 'm4v'],
+                    type: 'string',
+                    group: 'General:'
+                },
+                'x': {
+                    alias: 'extra-options',
+                    default: userSettings['extra-options'] || '',
+                    describe: 'Extra x265 options. Options can be found on the x265 options page.',
+                    type: 'string',
+                    group: 'Advanced:'
+                },
+                'q': {
+                    alias: 'quality',
+                    default: userSettings['quality'] || 19,
+                    describe: 'Sets the qp quality target',
+                    type: 'number',
+                    group: 'General:'
+                },
+                'video-bitrate': {
+                    default: userSettings['video-bitrate'] || 0,
+                    describe: 'Sets the video bitrate, set to 0 to use qp rate control instead of a target bitrate.',
+                    type: 'number',
+                    group: 'Advanced:'
+                },
+                'l': {
+                    alias: 'preview-length',
+                    default: userSettings['preview-length'] || 30000,
+                    describe: 'Milliseconds to encode in preview mode. Max is half the length of input video.',
+                    type: 'number',
+                    group: 'Advanced:'
+                },
+                'time-drift-limit': {
+                    default: userSettings['time-drift-limit'] || 200,
+                    describe: 'Milliseconds the finished encode is allowed to differ from the original\'s length.',
+                    type: 'number',
+                    group: 'Advanced:'
+                },
+                // 'depth': {
+                //     default: 2,
+                //     describe: 'How deep the search for video files should go in subdirectories.',
+                //     type: 'number',
+                //     group: 'Advanced:'
+                // },
+                'accurate-timestamps': {
+                    default: userSettings['accurate-timestamps'] || false,
+                    describe: 'Become blu-ray complient and reduce the max keyInt to the average frame rate.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'he-audio': {
+                    default: userSettings['he-audio'] || false,
+                    describe: 'Re-encode audio to opus at 48kb/s.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'force-he-audio': {
+                    default: userSettings['force-he-audio'] || false,
+                    describe: 'Convert all audio to HE format, including lossless formats.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'downmix-he-audio': {
+                    default: userSettings['downmix-he-audio'] || false,
+                    describe: 'Downmix he-audio opus to Dolby Pro Logic II at 96kb/s. Enables he-audio.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'o': {
+                    alias: 'override',
+                    default: userSettings['override'] || false,
+                    describe: 'Enable override mode. Allows conversion of videos that are already encoded by the hevc codec.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'p': {
+                    alias: 'preview',
+                    default: userSettings['preview'] || false,
+                    describe: 'Only encode a preview of the video starting at middle of video. See -l/--preview-length for more info.',
+                    type: 'boolean',
+                    group: 'General:'
+                },
+                'multi-pass': {
+                    default: userSettings['mutli-pass'] || 0,
+                    describe: 'Enable multiple passes by the encoder. Must be greater 1.',
+                    type: 'number',
+                    group: 'Advanced:'
+                },
+                'disable-upconvert': {
+                    default: userSettings['disable-upconvert'] || false,
+                    describe: 'Disable Upconvert. Stop converting Vobsub subs to srt. Only works with mkv\'s.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'stats': {
+                    default: userSettings['stats'] || false,
+                    describe: 'Output a stats file containing stats for each video converted.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'v': {
+                    alias: 'verbose',
+                    default: userSettings['verbose'] || false,
+                    describe: 'Enables verbose mode. Prints extra information.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                '10bit': {
+                    default: userSettings['10bit'] || false,
+                    describe: 'Forces encoding videos in 10bit format (Useful for anime).',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                '12bit': {
+                    default: userSettings['12bit'] || false,
+                    describe: 'Forces encoding videos in 12bit format (Useful for anime).',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'screenshots': {
+                    default: userSettings['screenshots'] || false,
+                    describe: 'Take 6 screenshots at regular intervals throughout the finished encode.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'debug': {
+                    default: userSettings['debug'] || false,
+                    describe: 'Enables debug mode. Prints extra debugging information.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'delete': {
+                    default: userSettings['delete'] || false,
+                    describe: 'Delete source after encoding is complete and replaces it with new encode. [DANGER]',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'test': {
+                    default: userSettings['test'] || false,
+                    describe: 'Puts h265ize in test mode. No files will be encoded.',
+                    type: 'boolean',
+                    group: 'Options:'
+                },
+                'help': {
+                    describe: 'Displays help page.',
+                    group: 'Options:'
+                },
+            })
+            .argv;
 
+
+        // Show help
+        if (args.help) {
+            console.log(colors.underline('Package:'), colors.yellow(packageSettings.name), '\t', colors.underline('Version:'), colors.yellow(packageSettings.version));
+            console.log(colors.underline('Description:'), packageSettings.description);
+            yargs.showHelp();
+            process.exit(0);
+        }
+
+        resolve();
+    });
+};
 
 // Enable Logger ---------------------------------------------------------------
 
@@ -247,114 +292,158 @@ var logLevels = {
         debug: 'grey'
     }
 };
-var logLevel = args.debug ? 'debug' : args.verbose ? 'verbose' : 'info';
 
-winston.addColors(logLevels.colors);
-var lastLineWasCleared = false;
-var logger = new(winston.Logger)({
-    levels: logLevels.levels,
-    transports: [
-        new(winston.transports.Console)({
-            level: logLevel,
-            colorize: true,
-            label: packageId,
-            prettyPrint: true,
-            // handleExceptions: true,
-            // humanReadableUnhandledException: true,
-            // timestamp: function() {
-            //     return Date.now();
-            // },
-            formatter: function(options) {
-                let packageId = options.level === 'error' ? colors[logLevels.colors['error']]('[' + options.label + ']') : colors.green('[' + options.label + ']');
-                let logLevel = (options.level === 'info' || options.level === 'error') ? '' : colors[logLevels.colors[options.level]]('[' + options.level + ']') + ' ';
-                return packageId + ': ' + logLevel +
-                    (undefined !== options.message ? options.message : '') +
-                    (options.meta && Object.keys(options.meta).length ? createListString(options.meta) : '');
-            }
-        }),
-    ],
-    filters: [
-        function(level, msg, meta) {
-            if (meta.__divider)
-                msg = msg + '\n' + '-'.repeat(process.stdout.columns);
+var logLevel, lastLineWasCleared, logger;
 
-            delete meta.__clearLine;
-            delete meta.__divider;
-            return msg;
+h265ize.setupLogger = function() {
+    return new Promise(function(resolve, reject) {
+        logLevel = args.debug ? 'debug' : args.verbose ? 'verbose' : 'info';
+
+        winston.addColors(logLevels.colors);
+        lastLineWasCleared = false;
+        logger = new(winston.Logger)({
+            levels: logLevels.levels,
+            transports: [
+                new(winston.transports.Console)({
+                    level: logLevel,
+                    colorize: true,
+                    label: packageSettings.name,
+                    prettyPrint: true,
+                    // handleExceptions: true,
+                    // humanReadableUnhandledException: true,
+                    // timestamp: function() {
+                    //     return Date.now();
+                    // },
+                    formatter: function(options) {
+                        let label = options.level === 'error' ? colors[logLevels.colors['error']]('[' + options.label + ']') : colors.green('[' + options.label + ']');
+                        let logLevel = (options.level === 'info' || options.level === 'error') ? '' : colors[logLevels.colors[options.level]]('[' + options.level + ']') + ' ';
+                        return label + ': ' + logLevel +
+                            (undefined !== options.message ? options.message : '') +
+                            (options.meta && Object.keys(options.meta).length ? createListString(options.meta) : '');
+                    }
+                }),
+            ],
+            filters: [
+                function(level, msg, meta) {
+                    if (meta.__divider)
+                        msg = msg + '\n' + '-'.repeat(process.stdout.columns);
+
+                    delete meta.__clearLine;
+                    delete meta.__divider;
+                    return msg;
+                }
+            ],
+            rewriters: [
+                function(level, msg, meta) {
+                    if (meta.__clearLine && lastLineWasCleared) {
+                        readline.moveCursor(process.stdout, -1000, -1);
+                        readline.clearLine(process.stdout, 0);
+                        lastLineWasCleared = true;
+                    }
+                    else if (meta.__clearLine) {
+                        lastLineWasCleared = true;
+                    }
+                    else {
+                        lastLineWasCleared = false;
+                    }
+
+                    return meta;
+                }
+            ]
+        });
+
+
+        if (args.debug) {
+            logger.debug('Log file location:', args.logFile);
+            logger.add(winston.transports.File, {
+                filename: args.logFile,
+                level: logLevel,
+                label: packageSettings.name,
+                prettyPrint: true,
+                json: false,
+                timestamp: false,
+                formatter: function(options) {
+                    let label = '[' + options.label + ']';
+                    let logLevel = (options.level === 'info' || options.level === 'error') ? '' : '[' + options.level + ']' + ' ';
+                    return stripAnsi(label + ': ' + logLevel +
+                        (undefined !== options.message ? options.message : '') +
+                        (options.meta && Object.keys(options.meta).length ? createListString(options.meta) : ''));
+                }
+            });
         }
-    ],
-    rewriters: [
-        function(level, msg, meta) {
-            if (meta.__clearLine && lastLineWasCleared) {
-                readline.moveCursor(process.stdout, -1000, -1);
-                readline.clearLine(process.stdout, 0);
-                lastLineWasCleared = true;
-            }
-            else if (meta.__clearLine) {
-                lastLineWasCleared = true;
-            }
-            else {
-                lastLineWasCleared = false;
-            }
 
-            return meta;
-        }
-    ]
-});
-
-// Show help
-if (args.help) {
-    console.log(colors.underline('Package:'), colors.yellow(packageId), '\t', colors.underline('Version:'), colors.yellow(version));
-    console.log(colors.underline('Descriptions:'), description);
-    yargs.showHelp();
-    process.exit(0);
-}
-
-if (args.debug) {
-    logger.debug('Log file location:', args.logFile);
-    logger.add(winston.transports.File, {
-        filename: args.logFile,
-        level: logLevel,
-        label: packageId,
-        prettyPrint: true,
-        json: false,
-        timestamp: false,
-        formatter: function(options) {
-            let packageId = '[' + options.label + ']';
-            let logLevel = (options.level === 'info' || options.level === 'error') ? '' : '[' + options.level + ']' + ' ';
-            return stripAnsi(packageId + ': ' + logLevel +
-                (undefined !== options.message ? options.message : '') +
-                (options.meta && Object.keys(options.meta).length ? createListString(options.meta) : ''));
-        }
+        resolve();
     });
-}
+};
 
-// Setup stats file ------------------------------------------------------------
+// Handle Keypresses -----------------------------------------------------------
 
-// var csvStream = csv
-//     .createWriteStream({headers: true})
-//     .transform(function(row){
-//         return {
-//           A: row.a,
-//           B: row.b
-//         };
-//     }),
-//     writableStream = fs.createWriteStream("my.csv");
+h265ize.handleKeypress = function() {
+    return new Promise(function(resolve, reject) {
+        logger.verbose('Handling keypresses...');
+        // make `process.stdin` begin emitting "keypress" events 
+        keypress(process.stdin);
+
+        // listen for the "keypress" event 
+        process.stdin.on('keypress', function(ch, key) {
+            if (key && key.name == 'd') {
+                logger.info('Debugging', !args['debug'] ? 'enabled.' : 'disabled.');
+                args['debug'] = !args['debug'];
+                h265ize.setupLogger();
+            }
+            else if (key && key.ctrl && key.name == 'c') {
+                readline.clearLine(process.stdout, 0);
+                readline.moveCursor(process.stdout, -1000, 0);
+                logger.warn('Caught signal interupt! Attempted to clean up.');
+                cleanUp(true);
+            }
+            else if (key && key.name == 'p') {
+                if (temp.commandQueue.length < 1) {
+                    return logger.info('No encode running...');
+                }
+
+                if (state !== 'paused') {
+                    _.each(temp.commandQueue, function(command, i) {
+                        command.kill('SIGTSTP');
+                    });
+                    state = 'paused';
+                    logger.info('Encoder paused!');
+                }
+                else {
+                    _.each(temp.commandQueue, function(command, i) {
+                        command.kill('SIGCONT');
+                    });
+                    state = 'running';
+                    logger.info('Encoder resumed!');
+                }
+            }
+        });
+
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        resolve();
+    });
+};
 
 // Ensure directories exist ----------------------------------------------------
 
-// Check destination directory
-fs.ensureDir(args.destination, function(err) {
-    if (err) {
-        throw err;
-    }
-});
-// Check temp directory
-fs.ensureDir(args.tempDirectory, function(err) {
-    if (err) {
-        throw err;
-    }
-});
+h265ize.createDirectories = function(destination, tempDirectory) {
+    return new Promise(function(resolve, reject) {
+        // Check destination directory
+        fs.ensureDir(destination, function(err) {
+            if (err) {
+                throw err;
+            }
+            // Check temp directory
+            fs.ensureDir(tempDirectory, function(err) {
+                if (err) {
+                    throw err;
+                }
+                resolve();
+            });
+        });
+    });
+};
 
 // Watch for unclean shutdowns -------------------------------------------------
 
@@ -362,154 +451,177 @@ var temp = {
     files: [],
     commandQueue: []
 };
-process.on('SIGINT', function() {
-    readline.clearLine(process.stdout, 0);
-    readline.moveCursor(process.stdout, -1000, 0);
-    logger.warn('Caught signal interupt! Attempted to clean up.');
-    cleanUp(true);
-});
-process.on('uncaughtException', (err) => {
-    logger.error(err);
-    cleanUp(true);
-});
+
+h265ize.watchSigInt = function() {
+    return new Promise(function(resolve, reject) {
+        process.on('SIGINT', function() {
+            readline.clearLine(process.stdout, 0);
+            readline.moveCursor(process.stdout, -1000, 0);
+            logger.warn('Caught signal interupt! Attempted to clean up.');
+            cleanUp(true);
+        });
+        process.on('uncaughtException', (err) => {
+            logger.error(err);
+            cleanUp(true);
+        });
+        resolve();
+    });
+};
 
 // Special Features ------------------------------------------------------------
 
 
 
 // Set aspreset values -----------------------------------------------------------
-logger.verbose('Setting as-preset options...');
 
 var asPresetParams = {};
 var x265Options;
 
-switch (args.asPreset) {
-    case 'basic':
-        asPresetParams['preset'] = 'fast';
-        asPresetParams['quality'] = '19';
-        break;
+h265ize.processAsPreset = function() {
+    return new Promise(function(resolve, reject) {
+        logger.verbose('Setting as-preset options...');
 
-    case 'anime':
-        asPresetParams['preset'] = 'medium';
-        asPresetParams['quality'] = '19';
+        switch (args.asPreset) {
+            case 'basic':
+                asPresetParams['preset'] = 'fast';
+                asPresetParams['quality'] = '19';
+                break;
 
-        x265Options = 'allow-non-conformance:ref=8:bframes=8:rd=6:me=star:b-adapt=2:qg-size=64:rc-lookahead=40:scenecut=45:weightb=1:psy-rd=2.0';
+            case 'anime':
+                asPresetParams['preset'] = 'medium';
+                asPresetParams['quality'] = '19';
 
-        addx265Options(x265Options);
-        break;
+                x265Options = 'allow-non-conformance:ref=8:bframes=8:rd=6:me=star:b-adapt=2:qg-size=64:rc-lookahead=40:scenecut=45:weightb=1:psy-rd=2.0';
 
-    case 'testing-ssim':
-        x265Options = 'tune=ssim:ssim:psy-rd=0';
+                addx265Options(x265Options);
+                break;
 
-        addx265Options(x265Options);
-        break;
+            case 'testing-ssim':
+                x265Options = 'tune=ssim:ssim:psy-rd=0';
 
-    case 'none':
-        break;
+                addx265Options(x265Options);
+                break;
 
-    default:
-        logger.error('Unknown as-preset option', colors.yellow(args.asPreset) + '.');
-        process.exit(1);
-        break;
-}
+            case 'none':
+                break;
 
-_.each(asPresetParams, function(val, key) {
-    ifNotSetByUserSet(key, val);
-});
+            default:
+                logger.error('Unknown as-preset option', colors.yellow(args.asPreset) + '.');
+                process.exit(1);
+                break;
+        }
+
+        _.each(asPresetParams, function(val, key) {
+            ifNotSetByUserSet(key, val);
+        });
+
+        resolve();
+    });
+};
 
 // Get Files -------------------------------------------------------------------
 
-var input = args._[0] || './';
-var videos = [];
 var rejectedVideos = {};
-var atLeastVerbose = Boolean(logLevels.levels[logger.transports.console.level] >= 4);
-
-var fileDescriptorStats;
-try {
-    fileDescriptorStats = fs.lstatSync(input);
-}
-catch (e) {
-    if (e.code === 'ENOENT') {
-        logger.error('Input', input, 'does not exist.');
-        return process.exit(0);
-    }
-    throw e;
-}
 
 // Setup stats file ------------------------------------------------------------
 
 var statsFile = false;
-if (args.stats)
-    loadStatsFile(path.resolve(process.cwd(), 'h265ize.csv')).then(function(stream) {
-        statsFile = stream;
-        processInput();
+
+h265ize.initStatsFile = function(path) {
+    return new Promise(function(resolve, reject) {
+        if (args.stats)
+            loadStatsFile(path).then(function(stream) {
+                statsFile = stream;
+                resolve();
+            }).catch(reject);
+        else
+            resolve();
     });
-else
-    processInput();
+};
 
 
 // Process file/directory ------------------------------------------------------
 
-function processInput() {
-    // Check if input is a file
-    if (fileDescriptorStats.isFile()) {
-        if (mime.lookup(input).startsWith('video/')) {
-            videos.push(input);
-            processVideos(videos);
+h265ize.processInput = function(input) {
+    return new Promise(function(resolve, reject) {
+        let fileDescriptorStats;
+        try {
+            fileDescriptorStats = fs.lstatSync(input);
         }
-        else
-            logger.error('Input file', "\'" + input + "\'", 'is not a recognized file format.');
-    }
+        catch (e) {
+            if (e.code === 'ENOENT') {
+                logger.error('Input', input, 'does not exist.');
+                return process.exit(0);
+            }
+            throw e;
+        }
 
-    // Check if input is a directory
-    else if (fileDescriptorStats.isDirectory()) {
-        // Get all files in directory
-        findVideos(input).then(function(videoPaths) {
-            logger.info('Folder encoding started at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")));
-            processVideos(videoPaths);
-        }).catch(function(err) {
-            logger.error(err);
-        });
-    }
-}
+        // Check if input is a file
+        if (fileDescriptorStats.isFile()) {
+            if (mime.lookup(input).startsWith('video/')) {
+                resolve([input]);
+            }
+            else
+                reject('Input file', "\'" + input + "\'", 'is not a recognized file format.');
+        }
+
+        // Check if input is a directory
+        else if (fileDescriptorStats.isDirectory()) {
+            // Get all files in directory
+            findVideos(input).then(function(videoPaths) {
+                logger.verbose('Folder encoding started at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")));
+                resolve(videoPaths);
+            }).catch(function(err) {
+                reject(err);
+            });
+        }
+
+    });
+};
 
 
 // Process Videos --------------------------------------------------------------
 
-function processVideos(videos) {
-    if (videos.length > 0) {
-        let video = videos.shift();
-        let startTime = moment();
+h265ize.processVideos = function(videos) {
+    return new Promise(function(resolve, reject) {
 
-        logger.info('Processing', path.basename(video) + "...", {
-            __divider: true
-        });
-        logger.info('Encoding started at', colors.yellow(startTime.format("ddd, h:mm A")));
+        if (videos.length > 0) {
+            let video = videos.shift();
+            let startTime = moment();
 
-        processVideo(video).then(function() {
-            let endTime = moment();
-            let timeDiffMilliseconds = moment.duration(endTime.diff(startTime));
-            logger.info('Finished encoding at', colors.yellow(endTime.format("ddd, h:mm A")), '(' + moment.duration(timeDiffMilliseconds).humanize() + ')');
-            logger.debug('Finished encoding in', colors.yellow(timeDiffMilliseconds / 1000), 'seconds.');
-            processVideos(videos);
-        }).catch(function(err) {
-            logger.warn(err);
-            rejectedVideos[video] = err.message;
-            processVideos(videos);
-        });
-    }
-    else {
-        finished();
-    }
-}
+            logger.info('Processing', colors.bold(colors.yellow(path.basename(video))) + "...", {
+                __divider: true
+            });
+            logger.verbose('Encoding started at', colors.yellow(startTime.format("ddd, h:mm A")));
 
-function processVideo(video) {
+            h265ize.processVideo(video).then(function() {
+                let endTime = moment();
+                let timeDiffMilliseconds = moment.duration(endTime.diff(startTime));
+                logger.verbose('Finished encoding at', colors.yellow(endTime.format("ddd, h:mm A")), '(' + moment.duration(timeDiffMilliseconds).humanize() + ')');
+                logger.debug('Finished encoding in', colors.yellow(timeDiffMilliseconds / 1000), 'seconds.');
+                h265ize.processVideos(videos).then(resolve, reject);
+            }).catch(function(err) {
+                logger.warn(err);
+                rejectedVideos[video] = err.message;
+                h265ize.processVideos(videos).then(resolve, reject);
+            });
+        }
+        else {
+            resolve();
+        }
+
+    });
+};
+
+h265ize.processVideo = function(video) {
     return new Promise(function(resolve, reject) {
         logger.debug('Path:', video);
 
         let pathData = path.parse(video);
         pathData.filename = pathData.name + pathData.ext;
-        let command = new ffmpeg()
+        let command = new ffmpeg({
+                logger: logger
+            })
             .input(video);
 
         // Set video codec
@@ -522,8 +634,9 @@ function processVideo(video) {
         command.outputOptions('-c:s', 'copy');
 
         let inputCounter = 0;
+        let pass = 0;
 
-        let relativeDestinationDirectory = path.relative(path.dirname(input), pathData.dir);
+        let relativeDestinationDirectory = path.relative(path.dirname(args._[0] || process.cwd()), pathData.dir);
         let destinationDirectory = path.resolve(args.destination, relativeDestinationDirectory);
         if (args.delete) {
             destinationDirectory = path.dirname(video);
@@ -616,6 +729,15 @@ function processVideo(video) {
                             break;
                     }
                 });
+
+                // Preview Mode
+                if (args.preview) {
+                    command.seekInput(metadata.format.duration / 2).duration(args.previewLength / 1000);
+                }
+
+                if (args.multiPass > 1) {
+                    command.outputOptions('-x265-params', '--pass=1:--stats=' + path.resolve(args.tempDirectory, 'x265stats.log'));
+                }
 
                 resolve({
                     metadata: metadata,
@@ -809,46 +931,49 @@ function processVideo(video) {
             });
         };
 
+        // High Efficiency audio
+        let mapHEAudio = function(data) {
+            return new Promise(function(resolve, reject) {
+                logger.verbose('Mapping HE Audio streams...');
+                if (!args.heAudio)
+                    return resolve(data);
+
+                _.each(data.streams.audioStreams, function(stream, i) {
+                    if (stream.codec_name !== 'flac' || args.forceHeAudio) {
+                        logger.verbose('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'will be encoded to HE Audio.');
+                        let bitrate = 64 * stream.channels / 2;
+                        command.outputOptions('-c:a:' + i, 'libopus');
+                        command.outputOptions('-b:a:' + i, bitrate + 'k');
+                        command.outputOptions('-frame_duration', 60);
+                        if (args.downmixHeAudio && stream.channels > 3) {
+                            // Downmix HE Audio
+                            command.audioChannels(2).audioFilters('aresample=matrix_encoding=dplii');
+                            stream.channels = 2;
+                        }
+
+
+                        // Handle settings a new title
+                        let audioTitle = getStreamTitle(stream);
+                        let normalizedLanguage = normalizeStreamLanguage(stream);
+                        if (!(audioTitle)) {
+                            let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
+                            let newTitle = normalizedLanguage + ' OPUS (' + channelsFormated + ')';
+                            logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
+                            command.outputOptions('-metadata:s:a:' + stream.index, 'title="' + newTitle);
+                        }
+                    }
+                    else {
+                        logger.alert('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'won\'t be encoded with HE Audio because it is already in FLAC (lossless) format.');
+                    }
+                });
+
+                resolve(data);
+            });
+        };
+
         let setArguments = function(data) {
             return new Promise(function(resolve, reject) {
                 logger.verbose('Setting ffmpeg settings...');
-
-                // Preview Mode
-                if (args.preview) {
-                    command.seekInput(data.metadata.format.duration / 2).duration(args.previewLength / 1000);
-                }
-
-                // High Efficiency audio
-                if (args.heAudio) {
-                    _.each(data.streams.audioStreams, function(stream, i) {
-                        if (stream.codec_name !== 'flac' || args.forceHeAudio) {
-                            logger.verbose('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'will be encoded to HE Audio.');
-                            let bitrate = 64 * stream.channels / 2;
-                            command.outputOptions('-c:a:' + i, 'libopus');
-                            command.outputOptions('-b:a:' + i, bitrate + 'k');
-                            command.outputOptions('-frame_duration', 60);
-                            if (args.downmixHeAudio && stream.channels > 3) {
-                                // Downmix HE Audio
-                                command.audioChannels(2).audioFilters('aresample=matrix_encoding=dplii');
-                                stream.channels = 2;
-                            }
-
-
-                            // Handle settings a new title
-                            let audioTitle = getStreamTitle(stream);
-                            let normalizedLanguage = normalizeStreamLanguage(stream);
-                            if (!(audioTitle)) {
-                                let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
-                                let newTitle = normalizedLanguage + ' OPUS (' + channelsFormated + ')';
-                                logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
-                                command.outputOptions('-metadata:s:a:' + stream.index, 'title="' + newTitle);
-                            }
-                        }
-                        else {
-                            logger.alert('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'won\'t be encoded with HE Audio because it is already in FLAC (lossless) format.');
-                        }
-                    });
-                }
 
                 // Accurate Timestamps
                 if (args.accurateTimestamps)
@@ -877,6 +1002,7 @@ function processVideo(video) {
         let encodeVideo = function(data) {
             return new Promise(function(resolve, reject) {
                 logger.verbose('Encoding video...');
+                pass++;
                 let startTime = moment();
 
                 if (args.test)
@@ -884,8 +1010,6 @@ function processVideo(video) {
                         level: 'debug',
                         message: 'Test mode! Skipping...'
                     });
-
-
 
                 // Make output directory
                 if (!args.delete)
@@ -905,28 +1029,32 @@ function processVideo(video) {
 
                 command
                     .on('progress', function(progress) {
-                        let precent = progress.percent ? progress.percent.toFixed(1) + '%' : '';
-                        data.elapsed = moment().diff(startTime);
-                        data.elapsedFormated = moment.duration(moment.duration(data.elapsed), 'seconds').format('hh:mm:ss', {
+                        let precent = progress.percent ? progress.percent.toFixed(1) : '';
+                        data.elapsedFormated = moment.duration(moment().diff(startTime), 'seconds').format('hh:mm:ss', {
                             trim: false,
                             forceLength: true
                         });
-                        // let speed = 'x' + getSpeedRatio(progress.timemark, elapsed);
-                        let speed = 'x' + (progress.currentFps / frameRate).toFixed(3);
 
-                        logger.info(colors.bgMagenta.white('[ffmpeg]'), 'Processing:', progress.currentFps + 'fps', precent, '[' + progress.timemark + ']', '|', colors.yellow(data.elapsedFormated), colors.yellow('[' + speed + ']'), {
-                            __clearLine: true
+                        // let speed = 'x' + getSpeedRatio(progress.timemark, elapsed);
+                        let speed = (progress.currentFps / frameRate).toFixed(3);
+                        let eta = moment.duration((100 - precent) * data.metadata.format.duration * (1 / speed), 'seconds').format('hh:mm:ss', {
+                            trim: false,
+                            forceLength: true
                         });
+
+                        logger.info(colors.bgMagenta.white('[ffmpeg]'), 'Processing:', progress.currentFps + 'fps', precent + '%',
+                            '[' + progress.timemark + ']', '|', colors.yellow(data.elapsedFormated), '[x' + speed + ']',
+                            colors.blue(eta), {
+                                __clearLine: true
+                            });
                     })
                     .on('start', function(commandLine) {
                         data.tempFileIndex = temp.files.push(tempOutput);
                         logger.debug('Running Query:', commandLine);
                     })
-                    .on('stdout', function(stderrLine) {
-                        logger.info(colors.bgMagenta.white('[ffmpeg]'), stderrLine, {
-                            __clearLine: true
-                        });
-                    })
+                    // .on('stderr', function(stderrLine) {
+                    //     logger.info(colors.bgMagenta.white('[ffmpeg]'), stderrLine);
+                    // })
                     .on('end', function() {
                         _.pullAt(temp.commandQueue, commandIndex);
                         logger.verbose(pathData.filename, 'encoded.');
@@ -951,12 +1079,56 @@ function processVideo(video) {
             });
         };
 
+        let multiPass = function(data) {
+            return new Promise(function(resolve, reject) {
+                if (args.multiPass > 1) {
+                    if (pass < args.multiPass) {
+                        let newInput = tempOutput + '-pass' + pass;
+                        command = new ffmpeg(newInput, {
+                                logger: logger
+                            })
+                            .outputOptions('-map', 0)
+                            .outputOptions('-c', 'copy')
+                            .outputOptions('-c:v', 'libx265')
+                            .output(tempOutput);
+
+                        if (args.multiPass > 1) {
+                            if (args.multiPass === pass + 1) {
+                                command.outputOptions('-x265-params', '--pass=2:--stats=' + path.resolve(args.tempDirectory, 'x265stats.log'));
+                            }
+                            else {
+                                command.outputOptions('-x265-params', '--pass=3:--stats=' + path.resolve(args.tempDirectory, 'x265stats.log'));
+                            }
+                        }
+
+                        return fs.move(tempOutput, newInput, {
+                            clobber: true
+                        }, function(err) {
+                            if (err) {
+
+                                logger.error(err.message);
+                                logger.debug(err.stack);
+
+                                return reject({
+                                    level: 'warn',
+                                    message: 'Error moving file ' + colors.yellow(tempOutput) + ' to ' + colors.yellow(newInput) + '.'
+                                });
+                            }
+
+                            return setVideoBitDepth(data).then(setArguments).then(encodeVideo).then(multiPass).then(resolve, reject);
+                        });
+                    }
+                }
+                resolve(data);
+            });
+        };
+
         let verifyEncode = function(data) {
             return new Promise(function(resolve, reject) {
                 logger.verbose('Verifying encoded video...');
 
                 getMetadata(tempOutput).then(function(metadata) {
-                    logger.debug('Original Duration:', originalMetadata.format.duration, '(s)\t', 'New Duration:', metadata.format.duration + '(s)');
+                    logger.debug('Original Duration:', originalMetadata.format.duration + '(s)\t', 'New Duration:', metadata.format.duration + '(s)');
                     let timeDiff = (originalMetadata.format.duration - metadata.format.duration) * 1000;
                     if (timeDiff > args['time-diff-limit'] && !args.preview) {
                         logger.warn('New encode is', moment.duration(timeDiff).format(), 'longer than the original. The max is', args['time-diff-limit'] + '.');
@@ -1010,6 +1182,8 @@ function processVideo(video) {
             });
         };
 
+        // This is where the actual processing happens
+
         getMetadata(video)
 
         // Store original metadata
@@ -1020,16 +1194,25 @@ function processVideo(video) {
             });
         })
 
+        // Discover video streams to be upconverted and mapped
         .then(processStreams)
-            .then(upconvert)
-            .then(setVideoBitDepth)
+
+        // Upconvert streams
+        .then(upconvert)
+
+        // set video bit depth (8bit, 10bit, 12bit, etc.)
+        .then(setVideoBitDepth)
             .then(mapStreams)
+            .then(mapHEAudio)
             .then(setArguments)
             .then(encodeVideo)
+
+        // Check if video needs multiple passes
+        .then(multiPass)
             .then(verifyEncode)
             .then(takeScreenshots)
             .then(function(data) {
-                logger.info('Processing', pathData.name + '.' + args.outputFormat, 'complete.');
+                logger.info('Processing', colors.bold(colors.yellow(pathData.name + '.' + args.outputFormat)), 'complete.');
                 logger.info('Original:', colors.yellow(filesize(data.original.format.size)), '\t', 'New:', colors.yellow(filesize(data.new.format.size)), '\t', 'Precentage:', colors.yellow(data.ratio + '%'));
 
                 if (args.delete)
@@ -1059,9 +1242,9 @@ function processVideo(video) {
                 }
             });
     });
-}
+};
 
-function finished() {
+h265ize.finished = function() {
 
     logger.info('Folder encoding finished at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")), {
         __divider: true
@@ -1070,6 +1253,11 @@ function finished() {
         logger.alert('The following videos', colors.yellow('(' + _.keys(rejectedVideos).length + ')'), 'were not encoded:', rejectedVideos);
 
     cleanUp(true);
+};
+
+
+if (!module.parent) {
+    h265ize.runCli();
 }
 
 // Helper Functions ------------------------------------------------------------
@@ -1165,13 +1353,13 @@ function cleanUp(ending) {
         if (temp.files.length)
             logger.alert('The following temporary files were not deleted because you are in debug mode:', temp.files);
 
-        logger.info('Process exited.');
-        process.exit(0);
-
         if (temp.commandQueue.length)
             _.each(temp.commandQueue, function(command, i) {
                 command.kill();
             });
+
+        logger.info('Process exited.');
+        process.exit(0);
     }
 }
 
@@ -1274,11 +1462,13 @@ function findVideos(path) {
     return new Promise(function(resolve, reject) {
         recursive(path, function(err, files) {
 
+            let videos = [];
+
             // Handle any errors given while searching input directory
             if (err) {
                 logger.debug('Error:', err);
                 if (err.code === 'ENOENT')
-                    return reject('File or directory ' + colors.yellow(input) + ' does not exist.');
+                    return reject('File or directory ' + colors.yellow(args._[0] || process.cwd()) + ' does not exist.');
                 else
                     throw err;
             }
