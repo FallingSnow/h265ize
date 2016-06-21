@@ -921,6 +921,16 @@ h265ize.processVideo = function(video) {
                     });
                 });
 
+                // Other video streams (mjpeg "video" images, etc.)
+                _.each(data.streams.videoStreams, function(stream, i) {
+
+                    if (data.videoStream.index != stream.index) {
+                        command.outputOptions('-c:' + stream.index, 'copy');
+                        command.outputOptions('-map', stream.input + ':' + stream.index);
+                        logger.debug('Other video stream with index', stream.index, 'mapped.');
+                    }
+                });
+
                 // Other streams (Attachments: fonts, pictures, etc.)
                 _.each(data.streams.otherStreams, function(stream, i) {
                     command.outputOptions('-map', stream.input + ':' + stream.index);
