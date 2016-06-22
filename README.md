@@ -99,7 +99,7 @@ While in the h265ize directory run `git pull`.
 
 > --he-downmix :If there are more than 2.1 audio channels, downmix them to stereo. **`he-audio` must also be enabled**
 
-> --no-auto-audio-titles :Do not determine and add audio stream title metadata for audio streams without pre-existing title metadata.
+> --no-auto-audio-titles :Disable automated title generation for audio streams that do not have preexisting titles.
 
 > --screenshots :Take 6 screenshots at regular intervals throughout the finished encode
 
