@@ -179,6 +179,12 @@ h265ize.parseOptions = function() {
                     type: 'boolean',
                     group: 'Advanced:'
                 },
+                'auto-audio-titles': {
+                    default: userSettings['auto-audio-titles'] || true,
+                    describe: 'Determine and add audio stream title metadata for audio streams without pre-existing title metadata. Use --no-auto-audio-titles to disable.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
                 'o': {
                     alias: 'override',
                     default: userSettings['override'] || false,
@@ -915,7 +921,7 @@ h265ize.processVideo = function(video) {
                     let normalizedLanguage = normalizeStreamLanguage(stream);
 
                     command.outputOptions('-map', stream.input + ':' + stream.index);
-                    if (!(audioTitle)) {
+                    if (!(audioTitle) && args.autoAudioTitles) {
                         let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
                         let newTitle = normalizedLanguage + ' ' + stream.codec_name.toUpperCase() + ((stream.profile && stream.profile !== 'unknown') ? (' ' + stream.profile) : '') + ' (' + channelsFormated + ')';
                         logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
@@ -1001,7 +1007,7 @@ h265ize.processVideo = function(video) {
                         // Handle settings a new title
                         let audioTitle = getStreamTitle(stream);
                         let normalizedLanguage = normalizeStreamLanguage(stream);
-                        if (!(audioTitle)) {
+                        if (!(audioTitle) && args.autoAudioTitles) {
                             let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
                             let newTitle = normalizedLanguage + ' OPUS (' + channelsFormated + ')';
                             logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
