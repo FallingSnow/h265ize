@@ -633,6 +633,9 @@ h265ize.processVideo = function(video) {
         // Set subtitle codec
         command.outputOptions('-c:s', 'copy');
 
+        // Set attachments codec
+        command.outputOptions('-c:t', 'copy');
+
         let inputCounter = 0;
         let pass = 0;
 
@@ -797,7 +800,7 @@ h265ize.processVideo = function(video) {
 
                 if (data.streams.videoStreams.length > 1) {
                     // TODO implement feature to select the stream of greatest duration
-                    logger.alert('More than one video stream detected. Using the first video stream.');
+                    logger.alert('More than one video stream detected. Using the first video stream and discarding others.');
                     videoIndex = 0;
                 }
                 let videoStream = data.videoStream = data.streams.videoStreams[videoIndex];
@@ -919,16 +922,6 @@ h265ize.processVideo = function(video) {
                         language: normalizedLanguage,
                         codec: stream.codec_long_name
                     });
-                });
-
-                // Other video streams (mjpeg "video" images, etc.)
-                _.each(data.streams.videoStreams, function(stream, i) {
-
-                    if (data.videoStream.index != stream.index) {
-                        command.outputOptions('-c:' + stream.index, 'copy');
-                        command.outputOptions('-map', stream.input + ':' + stream.index);
-                        logger.debug('Other video stream with index', stream.index, 'mapped.');
-                    }
                 });
 
                 // Other streams (Attachments: fonts, pictures, etc.)
