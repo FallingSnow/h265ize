@@ -5,7 +5,7 @@ h265ize has experienced a major overhaul. Versions up to 0.3.x are written in ba
 h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.
 For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265ize/ "Ayrton Sparling").
 
-![NPM License](https://img.shields.io/npm/l/h265ize.svg) ![NPM Version](https://img.shields.io/npm/v/h265ize.svg) ![Open Github Issues](https://img.shields.io/github/issues/FallingSnow/h265ize.svg)
+![NPM License](https://img.shields.io/npm/l/h265ize.svg) ![NPM Version](https://img.shields.io/npm/v/h265ize.svg)
 
 If you have any questions or h265ize isn't working for you, feel free to open an issue.
 
