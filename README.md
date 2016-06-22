@@ -50,7 +50,7 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 While in the h265ize directory run `git pull`.
 
 ## Usage
-`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--screenshots] [--delete] <file|directory>`
+`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
 
 ### Options
 > -d :Folder to output files to
@@ -96,6 +96,8 @@ While in the h265ize directory run `git pull`.
 > --he-audio :High Efficiency audio mode
 
 > --he-downmix :If there are more than 2.1 audio channels, downmix them to stereo. **`he-audio` must also be enabled**
+
+> --no-auto-audio-titles :Do not determine and add audio stream title metadata for audio streams without pre-existing title metadata.
 
 > --screenshots :Take 6 screenshots at regular intervals throughout the finished encode
 
