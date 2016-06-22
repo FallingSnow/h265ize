@@ -670,6 +670,9 @@ h265ize.processVideo = function(video) {
         // Set subtitle codec
         command.outputOptions('-c:s', 'copy');
 
+        // Set attachments codec
+        command.outputOptions('-c:t', 'copy');
+
         // Maintain aspect ratio
         command.keepDAR();
 
@@ -845,8 +848,8 @@ h265ize.processVideo = function(video) {
                     videoBitDepth = 8;
 
                 if (data.streams.videoStreams.length > 1) {
-                    // TODO implement feature
-                    logger.alert('More than one video stream detected. Using the video stream with the greatest duration.');
+                    // TODO implement feature to select the stream of greatest duration
+                    logger.alert('More than one video stream detected. Using the first video stream and discarding others.');
                     videoIndex = 0;
                 }
                 let videoStream = data.videoStream = data.streams.videoStreams[videoIndex];
