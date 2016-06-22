@@ -37,6 +37,7 @@ h265ize.runCli = function() {
         .then(h265ize.setupLogger)
         .then(h265ize.handleKeypress)
         .then(h265ize.watchSigInt)
+        .then(h265ize.preChecks)
         .then(function() {
             return h265ize.createDirectories(args.destination, args.tempDirectory);
         })
@@ -51,6 +52,7 @@ h265ize.runCli = function() {
         .then(h265ize.finished)
         .catch(function(err) {
             logger.error(err);
+            cleanUp(true);
         });
 };
 
@@ -177,6 +179,12 @@ h265ize.parseOptions = function() {
                     type: 'boolean',
                     group: 'Advanced:'
                 },
+                'auto-audio-titles': {
+                    default: userSettings['auto-audio-titles'] || true,
+                    describe: 'Determine and add audio stream title metadata for audio streams without pre-existing title metadata. Use --no-auto-audio-titles to disable.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
                 'o': {
                     alias: 'override',
                     default: userSettings['override'] || false,
@@ -232,6 +240,12 @@ h265ize.parseOptions = function() {
                     default: userSettings['screenshots'] || false,
                     describe: 'Take 6 screenshots at regular intervals throughout the finished encode.',
                     type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'scale': {
+                    default: userSettings['scale'] || false,
+                    describe: 'Width videos should be scale to. Videos will always maintain original aspect ratio. [Examples: 720, 480]',
+                    type: 'number',
                     group: 'Advanced:'
                 },
                 'debug': {
@@ -376,6 +390,15 @@ h265ize.setupLogger = function() {
     });
 };
 
+h265ize.preChecks = function() {
+    return new Promise(function(resolve, reject) {
+        if (!args.videoBitrate && args.multiPass > 1) {
+            return reject('You must set a video-bitrate to use multipass.');
+        }
+        resolve();
+    });
+};
+
 // Handle Keypresses -----------------------------------------------------------
 
 h265ize.handleKeypress = function() {
@@ -403,18 +426,10 @@ h265ize.handleKeypress = function() {
                 }
 
                 if (state !== 'paused') {
-                    _.each(temp.commandQueue, function(command, i) {
-                        command.kill('SIGTSTP');
-                    });
-                    state = 'paused';
-                    logger.info('Encoder paused!');
+                    h265ize.pause();
                 }
                 else {
-                    _.each(temp.commandQueue, function(command, i) {
-                        command.kill('SIGCONT');
-                    });
-                    state = 'running';
-                    logger.info('Encoder resumed!');
+                    h265ize.resume();
                 }
             }
         });
@@ -423,6 +438,26 @@ h265ize.handleKeypress = function() {
         process.stdin.resume();
         resolve();
     });
+};
+
+h265ize.pause = function() {
+    _.each(temp.commandQueue, function(command, i) {
+        command.kill('SIGTSTP');
+    });
+    state = 'paused';
+    logger.info('Encoder paused!');
+};
+
+h265ize.resume = function() {
+    _.each(temp.commandQueue, function(command, i) {
+        command.kill('SIGCONT');
+    });
+    state = 'running';
+    logger.info('Encoder resumed!');
+};
+
+h265ize.statusUpdate = function(video, status, data) {
+
 };
 
 // Ensure directories exist ----------------------------------------------------
@@ -615,10 +650,12 @@ h265ize.processVideos = function(videos) {
 
 h265ize.processVideo = function(video) {
     return new Promise(function(resolve, reject) {
+        h265ize.statusUpdate(video, 'initalize');
         logger.debug('Path:', video);
 
         let pathData = path.parse(video);
         pathData.filename = pathData.name + pathData.ext;
+        let x265Params = '';
         let command = new ffmpeg({
                 logger: logger
             })
@@ -635,6 +672,9 @@ h265ize.processVideo = function(video) {
 
         // Set attachments codec
         command.outputOptions('-c:t', 'copy');
+
+        // Maintain aspect ratio
+        command.keepDAR();
 
         let inputCounter = 0;
         let pass = 0;
@@ -667,6 +707,7 @@ h265ize.processVideo = function(video) {
         // Get video data
         let getMetadata = function(path) {
             return new Promise(function(resolve, reject) {
+                h265ize.statusUpdate(video, 'metadata');
                 logger.verbose('Getting video metadata...');
                 ffmpeg.ffprobe(path, function(err, metadata) {
                     if (err) {
@@ -694,6 +735,7 @@ h265ize.processVideo = function(video) {
 
         let processStreams = function(metadata) {
             return new Promise(function(resolve, reject) {
+                h265ize.statusUpdate(video, 'processstreams');
                 logger.verbose('Resolving video streams...');
 
                 let videoStreams = [],
@@ -739,8 +781,12 @@ h265ize.processVideo = function(video) {
                 }
 
                 if (args.multiPass > 1) {
-                    command.outputOptions('-x265-params', '--pass=1:--stats=' + path.resolve(args.tempDirectory, 'x265stats.log'));
+                    x265Params += '--pass=1:--stats=' + path.resolve(args.tempDirectory, 'x265stats.log') + ':';
                 }
+
+                // Scale video
+                if (args.scale)
+                    command.size('?x' + args.scale);
 
                 resolve({
                     metadata: metadata,
@@ -758,6 +804,8 @@ h265ize.processVideo = function(video) {
             return new Promise(function(resolve, reject) {
                 if (args.disableUpconvert || args.test)
                     return resolve(data);
+
+                h265ize.statusUpdate(video, 'upconvert');
 
                 logger.verbose('Upconverting...');
 
@@ -792,6 +840,7 @@ h265ize.processVideo = function(video) {
 
         let setVideoBitDepth = function(data) {
             return new Promise(function(resolve, reject) {
+                h265ize.statusUpdate(video, 'videoBitDepth');
                 logger.verbose('Setting video bit depth...');
 
                 // Video streams
@@ -847,6 +896,7 @@ h265ize.processVideo = function(video) {
 
         let mapStreams = function(data) {
             return new Promise(function(resolve, reject) {
+                h265ize.statusUpdate(video, 'mapstreams');
                 logger.verbose('Mapping streams...');
                 data.defaultAudioIndex = null;
                 data.defaultSubtitleIndex = null;
@@ -874,7 +924,7 @@ h265ize.processVideo = function(video) {
                     let normalizedLanguage = normalizeStreamLanguage(stream);
 
                     command.outputOptions('-map', stream.input + ':' + stream.index);
-                    if (!(audioTitle)) {
+                    if (!(audioTitle) && args.autoAudioTitles) {
                         let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
                         let newTitle = normalizedLanguage + ' ' + stream.codec_name.toUpperCase() + ((stream.profile && stream.profile !== 'unknown') ? (' ' + stream.profile) : '') + ' (' + channelsFormated + ')';
                         logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
@@ -941,6 +991,8 @@ h265ize.processVideo = function(video) {
                 if (!args.heAudio)
                     return resolve(data);
 
+                h265ize.statusUpdate(video, 'heAudio');
+
                 _.each(data.streams.audioStreams, function(stream, i) {
                     if (stream.codec_name !== 'flac' || args.forceHeAudio) {
                         logger.verbose('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'will be encoded to HE Audio.');
@@ -958,7 +1010,7 @@ h265ize.processVideo = function(video) {
                         // Handle settings a new title
                         let audioTitle = getStreamTitle(stream);
                         let normalizedLanguage = normalizeStreamLanguage(stream);
-                        if (!(audioTitle)) {
+                        if (!(audioTitle) && args.autoAudioTitles) {
                             let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
                             let newTitle = normalizedLanguage + ' OPUS (' + channelsFormated + ')';
                             logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
@@ -976,6 +1028,7 @@ h265ize.processVideo = function(video) {
 
         let setArguments = function(data) {
             return new Promise(function(resolve, reject) {
+                h265ize.statusUpdate(video, 'prepare');
                 logger.verbose('Setting ffmpeg settings...');
 
                 // Accurate Timestamps
@@ -987,7 +1040,7 @@ h265ize.processVideo = function(video) {
                     command.videoBitrate(args.videoBitrate);
                 }
                 else {
-                    command.outputOptions('-x265-params', 'crf=' + args.quality);
+                    x265Params += 'crf=' + args.quality + ':';
                 }
 
                 // H265 preset
@@ -996,7 +1049,7 @@ h265ize.processVideo = function(video) {
 
                 // H265 extra options
                 if (args.x)
-                    command.outputOptions('-x265-params', args.x);
+                    x265Params += args.x + ':';
 
                 resolve(data);
             });
@@ -1004,6 +1057,7 @@ h265ize.processVideo = function(video) {
 
         let encodeVideo = function(data) {
             return new Promise(function(resolve, reject) {
+                h265ize.statusUpdate(video, 'encoding');
                 logger.verbose('Encoding video...');
                 pass++;
                 let startTime = moment();
@@ -1025,22 +1079,25 @@ h265ize.processVideo = function(video) {
 
                 let commandIndex;
                 let frameRate = math.eval(data.videoStream.avg_frame_rate);
+
+                command.outputOptions('-x265-params', x265Params);
+
                 if (!args.parallel) {
-                    commandIndex = temp.commandQueue.push(command);
+                    commandIndex = temp.commandQueue.push(command) - 1;
                     command.save(tempOutput);
                 }
 
                 command
                     .on('progress', function(progress) {
                         let precent = progress.percent ? progress.percent.toFixed(1) : '';
-                        data.elapsedFormated = moment.duration(moment().diff(startTime), 'seconds').format('hh:mm:ss', {
+                        data.elapsedFormated = moment.duration(moment().diff(startTime), 'milliseconds').format('hh:mm:ss', {
                             trim: false,
                             forceLength: true
                         });
 
                         // let speed = 'x' + getSpeedRatio(progress.timemark, elapsed);
                         let speed = (progress.currentFps / frameRate).toFixed(3);
-                        let eta = moment.duration((100 - precent) * data.metadata.format.duration * (1 / speed), 'seconds').format('hh:mm:ss', {
+                        let eta = moment.duration((100 - precent) / 100 * data.metadata.format.duration * (1 / speed), 'seconds').format('hh:mm:ss', {
                             trim: false,
                             forceLength: true
                         });
@@ -1050,21 +1107,30 @@ h265ize.processVideo = function(video) {
                             colors.blue(eta), {
                                 __clearLine: true
                             });
+
+                        h265ize.statusUpdate(video, 'encoding', {
+                            fps: progress.currentFps,
+                            precent: precent,
+                            timemark: progress.timemark,
+                            elapsed: data.elapsedFormated,
+                            eta: eta,
+                            speed: speed
+                        });
                     })
                     .on('start', function(commandLine) {
-                        data.tempFileIndex = temp.files.push(tempOutput);
+                        temp.files.push(tempOutput);
                         logger.debug('Running Query:', commandLine);
                     })
                     // .on('stderr', function(stderrLine) {
                     //     logger.info(colors.bgMagenta.white('[ffmpeg]'), stderrLine);
                     // })
                     .on('end', function() {
-                        _.pullAt(temp.commandQueue, commandIndex);
+                        temp.commandQueue.splice(commandIndex, 1);
                         logger.verbose(pathData.filename, 'encoded.');
                         resolve(data);
                     })
                     .on('error', function(err, stdout, stderr) {
-                        _.pullAt(temp.commandQueue, commandIndex);
+                        temp.commandQueue.splice(commandIndex, 1);
                         logger.debug(err.stack);
 
                         if (err.message.startsWith('ffmpeg was killed with signal'))
@@ -1087,20 +1153,20 @@ h265ize.processVideo = function(video) {
                 if (args.multiPass > 1) {
                     if (pass < args.multiPass) {
                         let newInput = tempOutput + '-pass' + pass;
+                        x265Params = '';
                         command = new ffmpeg(newInput, {
                                 logger: logger
                             })
                             .outputOptions('-map', 0)
                             .outputOptions('-c', 'copy')
-                            .outputOptions('-c:v', 'libx265')
-                            .output(tempOutput);
+                            .outputOptions('-c:v', 'libx265');
 
                         if (args.multiPass > 1) {
                             if (args.multiPass === pass + 1) {
-                                command.outputOptions('-x265-params', '--pass=2:--stats=' + path.resolve(args.tempDirectory, 'x265stats.log'));
+                                x265Params += '--pass=2:--stats=' + path.resolve(args.tempDirectory, 'x265stats.log') + ':';
                             }
                             else {
-                                command.outputOptions('-x265-params', '--pass=3:--stats=' + path.resolve(args.tempDirectory, 'x265stats.log'));
+                                x265Params += '--pass=3:--stats=' + path.resolve(args.tempDirectory, 'x265stats.log') + ':';
                             }
                         }
 
@@ -1118,6 +1184,7 @@ h265ize.processVideo = function(video) {
                                 });
                             }
 
+                            logger.verbose('Running pass', pass + 1 + '.');
                             return setVideoBitDepth(data).then(setArguments).then(encodeVideo).then(multiPass).then(resolve, reject);
                         });
                     }
@@ -1160,6 +1227,7 @@ h265ize.processVideo = function(video) {
             return new Promise(function(resolve, reject) {
                 if (!args.screenshots)
                     return resolve(data);
+                h265ize.statusUpdate(video, 'screenshots');
 
                 logger.verbose('Taking screenshots...');
 
@@ -1172,7 +1240,7 @@ h265ize.processVideo = function(video) {
                             logger.alert('Only generating', colors.yellow(filenames.length), 'screenshots.');
                     })
                     .on('end', function() {
-                        _.pullAt(temp.commandQueue, commandIndex);
+                        temp.commandQueue.splice(commandIndex, 1);
                         resolve(data);
                     });
 
@@ -1229,12 +1297,16 @@ h265ize.processVideo = function(video) {
                         throw err;
 
                     logger.verbose(pathData.name + '.' + args.outputFormat, 'transfered successfully.');
-                    _.pullAt(temp.files, data.tempFileIndex);
+                    while (temp.files.indexOf(tempOutput) > -1)
+                        temp.files.splice(temp.files.indexOf(tempOutput), 1);
 
+                    h265ize.statusUpdate(video, 'finished');
                     resolve();
                 });
             })
             .catch(function(err) {
+
+                h265ize.statusUpdate(video, 'error', err.message);
                 rejectedVideos[video] = err.message;
                 if (err === 'ENDING') {
                     cleanUp(true);
@@ -1262,12 +1334,27 @@ h265ize.finished = function() {
 if (!module.parent) {
     h265ize.runCli();
 }
+else {
+    module.exports = h265ize;
+}
 
 // Helper Functions ------------------------------------------------------------
 
 String.prototype.capitalize = function() {
     return this.charAt(0).toUpperCase() + this.slice(1);
 };
+
+function dedupeX265ParamsOption(options) {
+    let firstIndex = options.indexOf('-x265-params');
+    for (let i = firstIndex + 1; i < options.length; i++) {
+        if (options[i] === '-x265-params') {
+            options[firstIndex + 1] += ':' + options[i + 1];
+            options.splice(i, 2);
+        }
+    }
+
+    return;
+}
 
 function getSpeedRatio(timemark, elapsed) {
 
@@ -1348,7 +1435,6 @@ function cleanUp(ending) {
                     logger.error(err);
             }
         });
-        temp.files.length = 0;
     }
     if (ending) {
         if (statsFile)
@@ -1360,6 +1446,7 @@ function cleanUp(ending) {
             _.each(temp.commandQueue, function(command, i) {
                 command.kill();
             });
+        temp.commandQueue.length = 0;
 
         logger.info('Process exited.');
         process.exit(0);

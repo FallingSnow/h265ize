@@ -5,6 +5,8 @@ h265ize has experienced a major overhaul. Versions up to 0.3.x are written in ba
 h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.
 For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265ize/ "Ayrton Sparling").
 
+![NPM License](https://img.shields.io/npm/l/h265ize.svg) ![NPM Version](https://img.shields.io/npm/v/h265ize.svg)
+
 If you have any questions or h265ize isn't working for you, feel free to open an issue.
 
 ## Features
@@ -50,7 +52,7 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 While in the h265ize directory run `git pull`.
 
 ## Usage
-`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--screenshots] [--delete] <file|directory>`
+`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
 
 ### Options
 > -d :Folder to output files to
@@ -96,6 +98,8 @@ While in the h265ize directory run `git pull`.
 > --he-audio :High Efficiency audio mode
 
 > --he-downmix :If there are more than 2.1 audio channels, downmix them to stereo. **`he-audio` must also be enabled**
+
+> --no-auto-audio-titles :Disable automated title generation for audio streams that do not have preexisting titles.
 
 > --screenshots :Take 6 screenshots at regular intervals throughout the finished encode
 
