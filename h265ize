@@ -217,6 +217,12 @@ h265ize.parseOptions = function() {
                     type: 'boolean',
                     group: 'Advanced:'
                 },
+                'disable-metadata': {
+                    default: userSettings['disable-metadata'] || false,
+                    describe: 'Disables setting any metadata properties when reencoding, includes --no-auto-subtitle-titles and --no-auto-audio-titles.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
                 'stats': {
                     default: userSettings['stats'] || false,
                     describe: 'Output a stats file containing stats for each video converted.',
@@ -927,7 +933,7 @@ h265ize.processVideo = function(video) {
                     let normalizedLanguage = normalizeStreamLanguage(stream);
 
                     command.outputOptions('-map', stream.input + ':' + stream.index);
-                    if (!(audioTitle) && args.autoAudioTitles) {
+                    if (!(audioTitle) && args.autoAudioTitles && !(args.disableMetadata)) {
                         let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
                         let newTitle = normalizedLanguage + ' ' + stream.codec_name.toUpperCase() + ((stream.profile && stream.profile !== 'unknown') ? (' ' + stream.profile) : '') + ' (' + channelsFormated + ')';
                         logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
@@ -935,7 +941,7 @@ h265ize.processVideo = function(video) {
                     }
 
                     // Set default audio
-                    if (data.defaultAudioIndex && data.defaultAudioIndex === stream.index) {
+                    if (data.defaultAudioIndex && data.defaultAudioIndex === stream.index && !(args.disableMetadata)) {
                         command.outputOptions('-metadata:s:a:' + i, 'DISPOSITION:default=1');
                     }
 
@@ -965,11 +971,15 @@ h265ize.processVideo = function(video) {
 
 
                     command.outputOptions('-map', stream.input + ':' + stream.index);
-                    if (!getStreamTitle(stream) && args.autoSubtitleTitles) {
+                    if (!getStreamTitle(stream) && args.autoSubtitleTitles && !(args.disableMetadata)) {
                         logger.alert('Subtitle does not have a title. Title set to', normalizedLanguage + '.');
                         command.outputOptions('-metadata:s:s:' + i, 'title=' + normalizedLanguage);
                     }
-                    command.outputOptions('-metadata:s:s:' + i, 'DISPOSITION:default=0');
+
+                    if (!(args.disableMetadata)) {
+                        command.outputOptions('-metadata:s:s:' + i, 'DISPOSITION:default=0');
+                    }
+
                     logger.debug('Subtitle stream with index', stream.index, 'mapped.', {
                         title: getStreamTitle(stream),
                         language: normalizedLanguage,
@@ -1013,7 +1023,7 @@ h265ize.processVideo = function(video) {
                         // Handle settings a new title
                         let audioTitle = getStreamTitle(stream);
                         let normalizedLanguage = normalizeStreamLanguage(stream);
-                        if (!(audioTitle) && args.autoAudioTitles) {
+                        if (!(audioTitle) && args.autoAudioTitles && !(args.disableMetadata)) {
                             let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
                             let newTitle = normalizedLanguage + ' OPUS (' + channelsFormated + ')';
                             logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
