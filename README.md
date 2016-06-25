@@ -52,7 +52,7 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 While in the h265ize directory run `git pull`.
 
 ## Usage
-`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
+`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
 
 ### Options
 > -d :Folder to output files to
@@ -92,6 +92,8 @@ While in the h265ize directory run `git pull`.
 > --depth :How deap the search for files should go in subdirectories; default: 2
 
 > --disable-upconvert :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
+
+> --no-auto-subtitle-titles :Disable automated title generation for subtitle streams that do not have preexisting titles.
 
 > --force-he-audio :Force High Efficiency audio encoding even on lossless audio tracks
 
