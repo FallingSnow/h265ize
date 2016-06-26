@@ -723,8 +723,27 @@ h265ize.processVideo = function(video) {
                         }),
                         size: filesize(metadata.format.size)
                     });
+                    if (!_.isNumber(metadata.format.duration)) {
+                        logger.alert('Could not retrieve video duration. Computing duration...');
+                        new ffmpeg({
+                            logger: logger
+                        }).input(video).outputFormat('null').output('-').on('end', function(stdout, stderr) {
+                            let lines = stderr.split('\n');
+                            let lastTime = lines[lines.length - 3];
+                            let duration = lastTime.match(new RegExp('time=(([0-9]|\:|\.)+) bitrate'))[1];
 
-                    resolve(metadata);
+                            // Fix bug with momentjs https://github.com/moment/moment/issues/3266
+                            if (duration.indexOf('.') <= duration.length - 3) {
+                                duration += '000';
+                            }
+
+                            let seconds = moment.duration(duration);
+                            metadata.format.duration = seconds.format("s", 6);
+                            resolve(metadata);
+                        }).run();
+                    }
+                    else
+                        resolve(metadata);
                 });
             });
         };
@@ -993,7 +1012,7 @@ h265ize.processVideo = function(video) {
                 _.each(data.streams.audioStreams, function(stream, i) {
                     if (stream.codec_name !== 'flac' || args.forceHeAudio) {
                         logger.verbose('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'will be encoded to HE Audio.');
-                        let bitrate = 64 * stream.channels / 2;
+                        let bitrate = 80 * stream.channels / 2;
                         command.outputOptions('-c:a:' + i, 'libopus');
                         command.outputOptions('-b:a:' + i, bitrate + 'k');
                         command.outputOptions('-frame_duration', 60);
@@ -1433,11 +1452,14 @@ function cleanUp(ending) {
             }
         });
     }
+    else {
+        if (temp.files.length)
+            logger.alert('The following temporary files were not deleted because you are in debug mode:', temp.files);
+    }
+
     if (ending) {
         if (statsFile)
             statsFile.end();
-        if (temp.files.length)
-            logger.alert('The following temporary files were not deleted because you are in debug mode:', temp.files);
 
         if (temp.commandQueue.length)
             _.each(temp.commandQueue, function(command, i) {
