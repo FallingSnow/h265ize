@@ -17,11 +17,11 @@ If you have any questions or h265ize isn't working for you, feel free to open an
 - Preserves audio codecs
 - Preserves audio track titles
 - Detects and preserves all subtitles
-- Detects audio language, if audio language is not your native language and native language subtitles are provided, makes those subtitle default
+- Detects audio language, if audio language is not your native language and native language subtitles are provided, makes those subtitles default
 - Automatically upconvert vobsub/dvdsubs to srt subtitles on mkv files
 - Detects bit depth and uses appropriate encoder profile (10-bit is common in high quality anime, supports 8-bit, 10-bit, 12-bit)
 - Verbose and preview mode
-- File override detection (doesn't accidentally write over a file that already exists, other than in preview mode)
+- File overwrite detection (doesn't accidentally write over a file that already exists, other than in preview mode)
 - Detects if file is already encoded in x265 and skips it
 - Ability to make encoding previews
 - Take screenshots of a finished encode
@@ -69,7 +69,7 @@ While in the h265ize directory run `git pull`.
 
 > -o :Override mode; Allows conversion of videos that are already encoded by the hevc codec
 
-> -p :Preview mode; Only processe a 30 second preview
+> -p :Preview mode; Only process a 30 second preview
 
 > -q :Sets the qp quality target; default: 19
 
@@ -87,9 +87,9 @@ While in the h265ize directory run `git pull`.
 
 > --debug :Debug mode; Print extra debugging information
 
-> --delete : Delete source after encoding is complete and replaces it with new encode; STRONGLY NOT RECOMMENED
+> --delete :Deletes source after encoding is complete and replaces it with new encode; STRONGLY NOT RECOMMENED
 
-> --depth :How deap the search for files should go in subdirectories; default: 2
+> --depth :How deep the search for files should go in subdirectories; default: 2
 
 > --disable-upconvert :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
 
