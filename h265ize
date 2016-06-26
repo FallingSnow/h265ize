@@ -163,19 +163,26 @@ h265ize.parseOptions = function() {
                 },
                 'he-audio': {
                     default: userSettings['he-audio'] || false,
-                    describe: 'Re-encode audio to opus at 48kb/s.',
+                    describe: 'Re-encode audio.',
                     type: 'boolean',
+                    group: 'Advanced:'
+                },
+                'he-audio-format': {
+                    default: userSettings['he-audio-format'] || 'opus',
+                    describe: 'Codec to use to reencode audio, if he-audio is set. Selecting "prologic" will downmix to Dolby Pro Logic II in an opus stream.',
+                    choices: ['opus', 'aac', 'prologic'],
+                    type: 'string',
+                    group: 'Advanced:'
+                },
+                'he-audio-bitrate': {
+                    default: userSettings['he-audio-bitrate'] || 64,
+                    describe: 'When re-encoding audio, the bitrate, per channel, in kbps. Minimum 32, default is 64, which equates to 128kbps total for a stereo stream, or 384kbps for 5.1 surround.',
+                    type: 'number',
                     group: 'Advanced:'
                 },
                 'force-he-audio': {
                     default: userSettings['force-he-audio'] || false,
                     describe: 'Convert all audio to HE format, including lossless formats.',
-                    type: 'boolean',
-                    group: 'Advanced:'
-                },
-                'downmix-he-audio': {
-                    default: userSettings['downmix-he-audio'] || false,
-                    describe: 'Downmix he-audio opus to Dolby Pro Logic II at 96kb/s. Enables he-audio.',
                     type: 'boolean',
                     group: 'Advanced:'
                 },
@@ -400,6 +407,19 @@ h265ize.preChecks = function() {
     return new Promise(function(resolve, reject) {
         if (!args.videoBitrate && args.multiPass > 1) {
             return reject('You must set a video-bitrate to use multipass.');
+        }
+        if (args.heAudioFormat == 'aac') {
+            // Check to make sure ffmpeg was compiled with the libfdk_aac encoder
+            let check = new ffmpeg();
+
+            check.getAvailableEncoders(function(err, encoders) {
+                if (!encoders.libfdk_aac) {
+                    return reject('ffmpeg must be compuled with the libadk_aac codec to use aac he audio.');
+                }
+            });
+        }
+        if (args.heAudioBitrate < 32) {
+            return reject('You must set a minimum he-audio-bitrate of 32.');
         }
         resolve();
     });
@@ -998,24 +1018,36 @@ h265ize.processVideo = function(video) {
 
                 _.each(data.streams.audioStreams, function(stream, i) {
                     if (stream.codec_name !== 'flac' || args.forceHeAudio) {
-                        logger.verbose('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'will be encoded to HE Audio.');
-                        let bitrate = 64 * stream.channels / 2;
-                        command.outputOptions('-c:a:' + i, 'libopus');
-                        command.outputOptions('-b:a:' + i, bitrate + 'k');
-                        command.outputOptions('-frame_duration', 60);
-                        if (args.downmixHeAudio && stream.channels > 3) {
-                            // Downmix HE Audio
-                            command.audioChannels(2).audioFilters('aresample=matrix_encoding=dplii');
-                            stream.channels = 2;
+                        logger.verbose('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'will be encoded to HE Audio (' + args.heAudioFormat + ').');
+
+                        if (args.heAudioFormat == 'prologic') {
+                            command.outputOptions('-c:a:' + i, 'libopus');
+                            command.outputOptions('-frame_duration', 60);
+                            if (stream.channels > 3) {
+                                // Downmix HE Audio
+                                command.audioChannels(2).audioFilters('aresample=matrix_encoding=dplii');
+                                stream.channels = 2;
+                            } else {
+                                logger.info('Stream only contains ', stream.channels, ' channels. Not downmixing.');
+                            }
+                        } else if (args.heAudioFormat == 'aac') {
+                            command.outputOptions('-c:a:' + i, 'libfdk_aac');
+                        } else {
+                            command.outputOptions('-c:a:' + i, 'libopus');
+                            command.outputOptions('-frame_duration', 60);
                         }
 
+                        // From https://trac.ffmpeg.org/wiki/Encode/HighQualityAudio recommended bitrates for libopus and libfdk_aac (default profile) are both >=128Kbps for 2 channels
+                        let bitrate = args.heAudioBitrate * stream.channels;
+
+                        command.outputOptions('-b:a:' + i, bitrate + 'k');
 
                         // Handle settings a new title
                         let audioTitle = getStreamTitle(stream);
                         let normalizedLanguage = normalizeStreamLanguage(stream);
                         if (!(audioTitle) && args.autoAudioTitles) {
                             let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
-                            let newTitle = normalizedLanguage + ' OPUS (' + channelsFormated + ')';
+                            let newTitle = normalizedLanguage + ' ' + (args.heAudioFormat == 'aac' ? 'AAC' : 'OPUS') + ' (' + channelsFormated + ')';
                             logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
                             command.outputOptions('-metadata:s:a:' + stream.index, 'title="' + newTitle);
                         }

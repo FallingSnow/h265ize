@@ -52,7 +52,7 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 While in the h265ize directory run `git pull`.
 
 ## Usage
-`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
+`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--he-audio-format <string>] [--he-audio-bitrate <kbps/channel>] [--force-he-audio] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
 
 ### Options
 > -d :Folder to output files to
@@ -97,9 +97,11 @@ While in the h265ize directory run `git pull`.
 
 > --force-he-audio :Force High Efficiency audio encoding even on lossless audio tracks
 
-> --he-audio :High Efficiency audio mode
+> --he-audio :High Efficiency audio mode. Will reencode non-lossless audio tracks.
 
-> --he-downmix :If there are more than 2.1 audio channels, downmix them to stereo. **`he-audio` must also be enabled**
+> --he-audio-format :Select the codec to use when re-encoding. Defaults to `opus`, other options include `aac` (requires `ffmpeg` compiled with `libfdk_aac`), and `prologic` which will downconvert to 2 channel stereo audio encoded with the opus codec and Dolby Pro Logic II.
+
+> --he-audio-bitrate :The bitrate, in kbps **per channel** to re-encode the audio at. Default is 64, minimum is 32.
 
 > --no-auto-audio-titles :Disable automated title generation for audio streams that do not have preexisting titles.
 
