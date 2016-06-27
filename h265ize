@@ -254,6 +254,12 @@ h265ize.parseOptions = function() {
                     type: 'number',
                     group: 'Advanced:'
                 },
+                'nice': {
+                    default: userSettings['nice'] || false,
+                    describe: 'Lowers the process priority for the encoding process on *nix systems to a background task. Has no effect on Windows.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
                 'debug': {
                     default: userSettings['debug'] || false,
                     describe: 'Enables debug mode. Prints extra debugging information.',
@@ -676,6 +682,10 @@ h265ize.processVideo = function(video) {
                 logger: logger
             })
             .input(video);
+
+        if(args.nice) {
+            command.renice(19);
+        }
 
         // Set video codec
         command.videoCodec('libx265');
