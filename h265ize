@@ -211,6 +211,12 @@ h265ize.parseOptions = function() {
                     type: 'boolean',
                     group: 'Advanced:'
                 },
+                'auto-subtitle-titles': {
+                    default: userSettings['auto-subtitle-titles'] || true,
+                    describe: 'Determine and add subtitle stream title metadata for subtitle streams without pre-existing title metadata. Use --no-auto-subtitle-titles to disable.',
+                    type: 'boolean',
+                    group: 'Advanced:'
+                },
                 'stats': {
                     default: userSettings['stats'] || false,
                     describe: 'Output a stats file containing stats for each video converted.',
@@ -978,7 +984,7 @@ h265ize.processVideo = function(video) {
 
 
                     command.outputOptions('-map', stream.input + ':' + stream.index);
-                    if (!getStreamTitle(stream)) {
+                    if (!getStreamTitle(stream) && args.autoSubtitleTitles) {
                         logger.alert('Subtitle does not have a title. Title set to', normalizedLanguage + '.');
                         command.outputOptions('-metadata:s:s:' + i, 'title=' + normalizedLanguage);
                     }
