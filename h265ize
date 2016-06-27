@@ -163,7 +163,7 @@ h265ize.parseOptions = function() {
                 },
                 'he-audio': {
                     default: userSettings['he-audio'] || false,
-                    describe: 'Re-encode audio to opus at 48kb/s.',
+                    describe: 'Re-encode audio to opus at 40kbps/channel.',
                     type: 'boolean',
                     group: 'Advanced:'
                 },
