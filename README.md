@@ -52,7 +52,7 @@ git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm instal
 While in the h265ize directory run `git pull`.
 
 ## Usage
-`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
+`./h265ize [-h|--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--nice] [--screenshots] [--delete] <file|directory>`
 
 ### Options
 > -d :Folder to output files to
@@ -108,6 +108,8 @@ While in the h265ize directory run `git pull`.
 > --stats: Creates a stats file in the destination named h265ize.csv
 
 > --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
+
+> --nice :Lowers the priority of the encoding process on *nix systems, but has no effect on Windows. This allows the encoder to run in the background with minimal effect on other processes.
 
 > --test: Test mode; Runs as normal, but do not encode any files
 
