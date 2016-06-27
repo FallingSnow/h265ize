@@ -266,14 +266,18 @@ h265ize.parseOptions = function() {
                     type: 'boolean',
                     group: 'Advanced:'
                 },
+                'help': {
+                    describe: 'Displays help page.',
+                    group: 'Options:'
+                },
                 'test': {
                     default: userSettings['test'] || false,
                     describe: 'Puts h265ize in test mode. No files will be encoded.',
                     type: 'boolean',
                     group: 'Options:'
                 },
-                'help': {
-                    describe: 'Displays help page.',
+                'version': {
+                    describe: 'Displays version information.',
                     group: 'Options:'
                 },
             })
@@ -285,6 +289,12 @@ h265ize.parseOptions = function() {
             console.log(colors.underline('Package:'), colors.yellow(packageSettings.name), '\t', colors.underline('Version:'), colors.yellow(packageSettings.version));
             console.log(colors.underline('Description:'), packageSettings.description);
             yargs.showHelp();
+            process.exit(0);
+        }
+
+        // Show version
+        if (args.version) {
+            console.log(packageSettings.name, packageSettings.version);
             process.exit(0);
         }
 
