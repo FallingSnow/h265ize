@@ -676,6 +676,9 @@ h265ize.processVideo = function(video) {
                 logger: logger
             })
             .input(video);
+            
+        // Lower priority to 10
+        command.renice(10);
 
         // Set video codec
         command.videoCodec('libx265');
@@ -926,6 +929,112 @@ h265ize.processVideo = function(video) {
             });
         };
 
+        let normalizeVolume = function(data) {
+
+        };
+
+        let autoCrop = function(data) {
+            return new Promise(function(resolve, reject) {
+                h265ize.statusUpdate(video, 'autoCrop');
+                logger.verbose('Detecting auto crop...');
+
+                const intervals = 12;
+                const interval = data.metadata.format.duration / (intervals + 1);
+
+                function detectCrop(start) {
+                    return new Promise(function(resolve, reject) {
+                        const cropRegexp = /crop=(-?[0-9]+):(-?[0-9]+):(-?[0-9]+):(-?[0-9]+)/g;
+                        let cropDetectCommand = new ffmpeg(video, {
+                            logger: logger
+                        }).seekInput(start).videoFilters("cropdetect=0.094:16:0").frames(2).format('null').output('-');
+
+                        let commandIndex, crop = {};
+
+                        if (!args.parallel) {
+                            commandIndex = temp.commandQueue.push(cropDetectCommand) - 1;
+                            cropDetectCommand.run();
+                        }
+
+                        cropDetectCommand
+                            .on('start', function(commandLine) {
+                                logger.debug('Running Query:', commandLine);
+                            })
+                            .on('end', function(stdout, stderr) {
+                                temp.commandQueue.splice(commandIndex, 1);
+
+                                let match = cropRegexp.exec(stderr);
+                                if (match === null) {
+                                    return reject({
+                                        level: 'error',
+                                        message: 'Could not run crop detection.'
+                                    });
+                                }
+
+                                crop.w = parseInt(match[1]);
+                                crop.h = parseInt(match[2]);
+                                crop.x = parseInt(match[3]);
+                                crop.y = parseInt(match[4]);
+                                resolve(crop);
+                            })
+                            .on('error', function(err, stdout, stderr) {
+                                temp.commandQueue.splice(commandIndex, 1);
+                                logger.debug(err.stack);
+
+                                if (err.message.startsWith('ffmpeg was killed with signal'))
+                                    reject('ENDING');
+                                else
+                                    reject({
+                                        level: 'error',
+                                        message: err.message
+                                    });
+                            });
+                    });
+                }
+
+                let i = 1,
+                    cropDetections = [];
+                
+                // This just runs all the ffmpeg crop detections in sync so you
+                // dont end up with a million threads running
+                function syncHandler(crop) {
+                    if (crop)
+                        cropDetections.push(crop);
+                    if (i <= intervals)
+                        detectCrop(interval * i++).then(syncHandler, reject);
+                    else
+                        cropDetectionComplete(cropDetections);
+                }
+                syncHandler();
+                
+                
+
+                // TODO: this seems overly complicated and inefficent
+                // detections is an array of objects, for example
+                // [ { w: '1920', h: '1072', x: '0', y: '4' },
+                //   { w: '1920', h: '1072', x: '0', y: '4' } ]
+                function cropDetectionComplete(detections) {
+                    let width = Number.NEGATIVE_INFINITY,
+                        height = Number.NEGATIVE_INFINITY,
+                        x = Number.POSITIVE_INFINITY,
+                        y = Number.POSITIVE_INFINITY;
+                    _.each(detections, function(val, key) {
+
+                        if (val.w > width)
+                            width = val.w;
+                        if (val.h > height)
+                            height = val.h;
+                        if (val.x < x)
+                            x = val.x;
+                        if (val.y < y)
+                            y = val.y;
+                    });
+
+                    command.videoFilters('crop=' + width + ':' + height + ':' + x + ':' + y);
+                    resolve(data);
+                }
+            });
+        };
+
         let mapStreams = function(data) {
             return new Promise(function(resolve, reject) {
                 h265ize.statusUpdate(video, 'mapstreams');
@@ -1121,8 +1230,11 @@ h265ize.processVideo = function(video) {
 
                 command
                     .on('progress', function(progress) {
-                        let precent = progress.percent ? progress.percent.toFixed(1) : '';
-                        data.elapsedFormated = moment.duration(moment().diff(startTime), 'milliseconds').format('hh:mm:ss', {
+                        let elapsed = moment.duration(moment().diff(startTime), 'milliseconds');
+                        let processed = momentizeTimemark(progress.timemark);
+                        let precent = progress.percent ? progress.percent.toFixed(1) : ((processed.asMilliseconds() / 1000 / data.metadata.format.duration) * 100).toFixed(1);
+                        let estimatedFileSize = precent > 10 ? filesize(fs.statSync(tempOutput).size / precent * 100) : '';
+                        data.elapsedFormated = elapsed.format('hh:mm:ss', {
                             trim: false,
                             forceLength: true
                         });
@@ -1135,15 +1247,15 @@ h265ize.processVideo = function(video) {
                         });
 
                         logger.info(colors.bgMagenta.white('[ffmpeg]'), 'Processing:', progress.currentFps + 'fps', precent + '%',
-                            '[' + progress.timemark + ']', '|', colors.yellow(data.elapsedFormated), '[x' + speed + ']',
-                            colors.blue(eta), {
+                            '[' + progress.timemark + ']', '|', colors.yellow(data.elapsedFormated), '[x' + speed + ']', colors.blue(eta), colors.blue(estimatedFileSize),
+                            {
                                 __clearLine: true
                             });
 
                         h265ize.statusUpdate(video, 'encoding', {
                             fps: progress.currentFps,
-                            precent: precent,
-                            timemark: progress.timemark,
+                            progress: precent,
+                            processed: processed,
                             elapsed: data.elapsedFormated,
                             eta: eta,
                             speed: speed
@@ -1303,6 +1415,8 @@ h265ize.processVideo = function(video) {
         // Upconvert streams
         .then(upconvert)
 
+        .then(autoCrop)
+
         // set video bit depth (8bit, 10bit, 12bit, etc.)
         .then(setVideoBitDepth)
             .then(mapStreams)
@@ -1388,15 +1502,13 @@ function dedupeX265ParamsOption(options) {
     return;
 }
 
-function getSpeedRatio(timemark, elapsed) {
+function momentizeTimemark(timemark) {
 
     let hours = parseInt(timemark.substring(0, timemark.indexOf(':')), 10);
     let minutes = parseInt(timemark.substring(timemark.indexOf(':') + 1, timemark.lastIndexOf(':')), 10);
     let seconds = parseFloat(timemark.substr(timemark.lastIndexOf(':') + 1));
-    let secondsProcessed = hours * 60 * 60 + minutes * 60 + seconds;
-    let secondsElapsed = elapsed / 1000;
 
-    return (secondsProcessed / secondsElapsed).toFixed(3);
+    return moment.duration().add(hours, 'h').add(minutes, 'm').add(seconds, 's');
 }
 
 function userSetOption(option) {
