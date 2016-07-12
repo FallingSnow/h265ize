@@ -1,6 +1,3 @@
-##### Updgrading to 0.4.x
-h265ize has experienced a major overhaul. Versions up to 0.3.x are written in bash and should work on most systems. Version 0.4.x onward requires nodejs in order to function.
-
 # h265ize
 h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.
 For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265ize/ "Ayrton Sparling").
@@ -29,27 +26,34 @@ If you have any questions or h265ize isn't working for you, feel free to open an
 - Maintains file structure in output folder (So in theory you could just take your 3tb movie folder and throw it into the script and the output folder should look that same but with x265 videos)
 
 ### Dependencies
-- [Node.js](https://nodejs.org/en/) - Required in order to run h265ize. **Necessary**.
-- [FFmpeg](https://www.ffmpeg.org/) - Does all the heavy lifting, including encoding. Also used for things like detecting timing, audio/video/subtitle tracks, languages, ect.. **Necessary**.
-- [mkvtoolnix](https://www.bunkus.org/videotools/mkvtoolnix/) - Used for upconverting subs in MKVs, not necessary.
-- [vobsub2srt](https://github.com/ruediger/VobSub2SRT) - Used for upconverting subs, not necessary.
+- [Node.js](https://nodejs.org/en/) - Required in order to run h265ize.
+
+#### Option Dependencies
+- [mkvtoolnix](https://www.bunkus.org/videotools/mkvtoolnix/) - Used for upconverting subs in MKVs.
+- [vobsub2srt](https://github.com/ruediger/VobSub2SRT) - Used for upconverting subs.
 
 ### Installation
 To install h265ize run one of the following command lines to download and install.
 
-##### Base Utility (Unix)
+##### Base Utility
 ```
-git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm install && chmod +x h265ize
+npm install h265ize
 ```
+
 ##### Arch Linux (Plus Dependencies)
 ```
-sudo pacman -S ffmpeg nodejs; \
+sudo pacman -S nodejs mkvtoolnix-cli; \
 yaourt vobsub2srt-git; \
+npm install h265ize --global
+```
+
+##### Bleeding Edge/Development
+```
 git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm install && chmod +x h265ize
 ```
 
 ### Updating
-While in the h265ize directory run `git pull`.
+Simply run `npm install h265ize --global` again.
 
 ## Usage
 `./h265ize [--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
@@ -139,6 +143,3 @@ For exmaple:
 
 ## Creating 10bit encodes
 To create 10bit or 12bit encodes, simply pass the `--10bit` or `--12bit` parameters respecively. You may need to install `x265_main10` and `x265_main12` (x265 main10 and main12 libraries) in order to encode in 10/12 bit.
-
-### TODO
-- [ ] Audio normalization

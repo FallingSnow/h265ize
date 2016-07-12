@@ -6,7 +6,6 @@ const optional = require('optional');
 const yargs = require('yargs');
 const _ = require("lodash");
 const winston = require("winston");
-const ffmpeg = require('fluent-ffmpeg');
 const mime = require('mime');
 const recursive = require('recursive-readdir');
 const colors = require('colors');
@@ -19,13 +18,19 @@ const math = require('mathjs');
 const stripAnsi = require('strip-ansi');
 const keypress = require('keypress');
 
+const ffmpegPath = require('ffmpeg-static').path;
+const ffprobePath = require('ffprobe-static').path;
+const ffmpeg = require('fluent-ffmpeg');
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath);
+
 const path = require('path');
 const os = require("os");
 const readline = require("readline");
 const spawn = require('child_process').spawn;
 
+const packageSettings = require(path.resolve(__dirname, 'package.json'));
 var userSettings = optional("settings.json") || {};
-var packageSettings = require(path.resolve(__dirname, 'package.json'));
 
 var h265ize = {},
     state = 'running';
@@ -676,7 +681,7 @@ h265ize.processVideo = function(video) {
                 logger: logger
             })
             .input(video);
-            
+
         // Lower priority to 10
         command.renice(10);
 
@@ -930,7 +935,7 @@ h265ize.processVideo = function(video) {
         };
 
         let normalizeVolume = function(data) {
-
+            // ffmpeg -i video.mkv -filter_complex "[0:a:0]volumedetect" -filter_complex "[0:a:1]volumedetect" -f null -map 0:a:0 -map 0:a:1 -
         };
 
         let autoCrop = function(data) {
@@ -941,12 +946,21 @@ h265ize.processVideo = function(video) {
                 const intervals = 12;
                 const interval = data.metadata.format.duration / (intervals + 1);
 
-                function detectCrop(start) {
+                function detectCrop(start, fallback) {
                     return new Promise(function(resolve, reject) {
                         const cropRegexp = /crop=(-?[0-9]+):(-?[0-9]+):(-?[0-9]+):(-?[0-9]+)/g;
                         let cropDetectCommand = new ffmpeg(video, {
-                            logger: logger
-                        }).seekInput(start).videoFilters("cropdetect=0.094:16:0").frames(2).format('null').output('-');
+                                logger: logger
+                            }).outputOptions('-map', data.videoStream.input + ':' + data.videoStream.index)
+                            .videoFilters("cropdetect=0.094:16:0").frames(2).format('null').output('-');
+
+                        if (fallback) {
+                            logger.warn('Initial crop detection failed! Running current crop detection in fallback mode. This is significantly slower.');
+                            cropDetectCommand.seekOutput(start);
+                        }
+                        else {
+                            cropDetectCommand.seekInput(start);
+                        }
 
                         let commandIndex, crop = {};
 
@@ -964,10 +978,14 @@ h265ize.processVideo = function(video) {
 
                                 let match = cropRegexp.exec(stderr);
                                 if (match === null) {
-                                    return reject({
-                                        level: 'error',
-                                        message: 'Could not run crop detection.'
-                                    });
+
+                                    if (fallback)
+                                        return reject({
+                                            level: 'error',
+                                            message: 'Could not run crop detection.'
+                                        });
+                                    else
+                                        return detectCrop(start, true).then(resolve, reject);
                                 }
 
                                 crop.w = parseInt(match[1]);
@@ -993,7 +1011,7 @@ h265ize.processVideo = function(video) {
 
                 let i = 1,
                     cropDetections = [];
-                
+
                 // This just runs all the ffmpeg crop detections in sync so you
                 // dont end up with a million threads running
                 function syncHandler(crop) {
@@ -1005,8 +1023,8 @@ h265ize.processVideo = function(video) {
                         cropDetectionComplete(cropDetections);
                 }
                 syncHandler();
-                
-                
+
+
 
                 // TODO: this seems overly complicated and inefficent
                 // detections is an array of objects, for example
@@ -1247,8 +1265,7 @@ h265ize.processVideo = function(video) {
                         });
 
                         logger.info(colors.bgMagenta.white('[ffmpeg]'), 'Processing:', progress.currentFps + 'fps', precent + '%',
-                            '[' + progress.timemark + ']', '|', colors.yellow(data.elapsedFormated), '[x' + speed + ']', colors.blue(eta), colors.blue(estimatedFileSize),
-                            {
+                            '[' + progress.timemark + ']', '|', colors.yellow(data.elapsedFormated), '[x' + speed + ']', colors.blue(eta), colors.blue(estimatedFileSize), {
                                 __clearLine: true
                             });
 
@@ -1415,10 +1432,9 @@ h265ize.processVideo = function(video) {
         // Upconvert streams
         .then(upconvert)
 
-        .then(autoCrop)
-
         // set video bit depth (8bit, 10bit, 12bit, etc.)
         .then(setVideoBitDepth)
+            .then(autoCrop)
             .then(mapStreams)
             .then(mapHEAudio)
             .then(setArguments)
