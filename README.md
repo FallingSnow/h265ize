@@ -93,8 +93,6 @@ Simply run `npm install h265ize --global` again.
 
 > --delete :Deletes source after encoding is complete and replaces it with new encode; STRONGLY NOT RECOMMENED
 
-> --depth :How deep the search for files should go in subdirectories; default: 2
-
 > --disable-upconvert :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
 
 > --force-he-audio :Force High Efficiency audio encoding even on lossless audio tracks

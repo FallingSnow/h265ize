@@ -2,6 +2,11 @@
 
 "use strict";
 
+const path = require('path');
+const os = require("os");
+const readline = require("readline");
+const spawn = require('child_process').spawn;
+
 const optional = require('optional');
 const yargs = require('yargs');
 const _ = require("lodash");
@@ -21,25 +26,22 @@ const keypress = require('keypress');
 const ffmpegPath = require('ffmpeg-static').path;
 const ffprobePath = require('ffprobe-static').path;
 const ffmpeg = require('fluent-ffmpeg');
-ffmpeg.setFfmpegPath(ffmpegPath);
-ffmpeg.setFfprobePath(ffprobePath);
 
-const path = require('path');
-const os = require("os");
-const readline = require("readline");
-const spawn = require('child_process').spawn;
-
+const languages = require('./lib/languages.js');
 const packageSettings = require(path.resolve(__dirname, 'package.json'));
 var userSettings = optional("settings.json") || {};
 
 var h265ize = {},
-    state = 'running';
+    state = 'running',
+    HEAudioBitrate = 40,
+    usingFallbackFfmpeg = false;
 
 var args;
 
 h265ize.runCli = function() {
     h265ize.parseOptions()
         .then(h265ize.setupLogger)
+        .then(h265ize.init)
         .then(h265ize.handleKeypress)
         .then(h265ize.watchSigInt)
         .then(h265ize.preChecks)
@@ -85,7 +87,7 @@ h265ize.parseOptions = function() {
                     group: 'General:'
                 },
                 'log-file': {
-                    default: userSettings['log-file'] || path.resolve(process.cwd(), 'log.txt'),
+                    default: userSettings['log-file'] || path.resolve(process.cwd(), 'h265ize.log'),
                     describe: 'Sets the log file location for all output from h265ize. Enable debug mode via the --debug flag to output to the log file.',
                     type: 'string',
                     normalize: true,
@@ -104,7 +106,7 @@ h265ize.parseOptions = function() {
                     describe: 'My personal presets. Descriptions of each preset\'s use and function can be found on the github page.',
                     choices: ['basic', 'anime', 'testing-ssim', 'none'],
                     type: 'string',
-                    group: 'Advanced:'
+                    group: 'Video:'
                 },
                 'n': {
                     alias: 'native-language',
@@ -126,7 +128,7 @@ h265ize.parseOptions = function() {
                     default: userSettings['extra-options'] || '',
                     describe: 'Extra x265 options. Options can be found on the x265 options page.',
                     type: 'string',
-                    group: 'Advanced:'
+                    group: 'Video:'
                 },
                 'q': {
                     alias: 'quality',
@@ -139,7 +141,7 @@ h265ize.parseOptions = function() {
                     default: userSettings['video-bitrate'] || 0,
                     describe: 'Sets the video bitrate, set to 0 to use qp rate control instead of a target bitrate.',
                     type: 'number',
-                    group: 'Advanced:'
+                    group: 'Video:'
                 },
                 'l': {
                     alias: 'preview-length',
@@ -154,48 +156,42 @@ h265ize.parseOptions = function() {
                     type: 'number',
                     group: 'Advanced:'
                 },
-                // 'depth': {
-                //     default: 2,
-                //     describe: 'How deep the search for video files should go in subdirectories.',
-                //     type: 'number',
-                //     group: 'Advanced:'
-                // },
                 'accurate-timestamps': {
                     default: userSettings['accurate-timestamps'] || false,
                     describe: 'Become blu-ray complient and reduce the max keyInt to the average frame rate.',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'Video:'
                 },
                 'he-audio': {
                     default: userSettings['he-audio'] || false,
                     describe: 'Re-encode audio to opus at 40kbps/channel.',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'Audio:'
                 },
                 'force-he-audio': {
                     default: userSettings['force-he-audio'] || false,
                     describe: 'Convert all audio to HE format, including lossless formats.',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'Audio:'
                 },
                 'downmix-he-audio': {
                     default: userSettings['downmix-he-audio'] || false,
-                    describe: 'Downmix he-audio opus to Dolby Pro Logic II at 96kb/s. Enables he-audio.',
+                    describe: 'Downmix he-audio opus to Dolby Pro Logic II at ' + HEAudioBitrate + 'kbps/channel. Enables he-audio.',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'Audio:'
                 },
                 'auto-audio-titles': {
                     default: userSettings['auto-audio-titles'] || true,
                     describe: 'Determine and add audio stream title metadata for audio streams without pre-existing title metadata. Use --no-auto-audio-titles to disable.',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'Audio:'
                 },
                 'o': {
                     alias: 'override',
                     default: userSettings['override'] || false,
                     describe: 'Enable override mode. Allows conversion of videos that are already encoded by the hevc codec.',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'General:'
                 },
                 'p': {
                     alias: 'preview',
@@ -208,19 +204,19 @@ h265ize.parseOptions = function() {
                     default: userSettings['mutli-pass'] || 0,
                     describe: 'Enable multiple passes by the encoder. Must be greater 1.',
                     type: 'number',
-                    group: 'Advanced:'
+                    group: 'Video:'
                 },
                 'disable-upconvert': {
                     default: userSettings['disable-upconvert'] || false,
                     describe: 'Disable Upconvert. Stop converting Vobsub subs to srt. Only works with mkv\'s.',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'Subtitle:'
                 },
                 'auto-subtitle-titles': {
                     default: userSettings['auto-subtitle-titles'] || true,
                     describe: 'Determine and add subtitle stream title metadata for subtitle streams without pre-existing title metadata. Use --no-auto-subtitle-titles to disable.',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'Subtitle:'
                 },
                 'stats': {
                     default: userSettings['stats'] || false,
@@ -233,31 +229,37 @@ h265ize.parseOptions = function() {
                     default: userSettings['verbose'] || false,
                     describe: 'Enables verbose mode. Prints extra information.',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'General:'
                 },
                 '10bit': {
                     default: userSettings['10bit'] || false,
                     describe: 'Forces encoding videos in 10bit format (Useful for anime).',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'Video:'
                 },
                 '12bit': {
                     default: userSettings['12bit'] || false,
                     describe: 'Forces encoding videos in 12bit format (Useful for anime).',
                     type: 'boolean',
-                    group: 'Advanced:'
+                    group: 'Video:'
                 },
                 'screenshots': {
                     default: userSettings['screenshots'] || false,
                     describe: 'Take 6 screenshots at regular intervals throughout the finished encode.',
                     type: 'boolean',
+                    group: 'Video:'
+                },
+                'normalize-level': {
+                    default: userSettings['normalize-level'] || 2,
+                    describe: 'Normalize the output. See README for more info.',
+                    type: 'number',
                     group: 'Advanced:'
                 },
                 'scale': {
                     default: userSettings['scale'] || false,
                     describe: 'Width videos should be scale to. Videos will always maintain original aspect ratio. [Examples: 720, 480]',
                     type: 'number',
-                    group: 'Advanced:'
+                    group: 'Video:'
                 },
                 'debug': {
                     default: userSettings['debug'] || false,
@@ -279,7 +281,7 @@ h265ize.parseOptions = function() {
                     default: userSettings['test'] || false,
                     describe: 'Puts h265ize in test mode. No files will be encoded.',
                     type: 'boolean',
-                    group: 'Options:'
+                    group: 'Advanced:'
                 },
                 'version': {
                     describe: 'Displays version information.',
@@ -405,6 +407,24 @@ h265ize.setupLogger = function() {
                         (options.meta && Object.keys(options.meta).length ? createListString(options.meta) : ''));
                 }
             });
+        }
+
+        resolve();
+    });
+};
+
+h265ize.init = function() {
+    return new Promise(function(resolve, reject) {
+
+        // Use fallback ffmpeg/ffprobe
+        if (!hasbin.sync('ffmpeg')) {
+            usingFallbackFfmpeg = true;
+            logger.alert('ffmpeg not found. Using fallback binary.');
+            ffmpeg.setFfmpegPath(ffmpegPath);
+        }
+        if (!hasbin.sync('ffprobe')) {
+            logger.alert('ffprobe not found. Using fallback binary.');
+            ffmpeg.setFfprobePath(ffprobePath);
         }
 
         resolve();
@@ -538,11 +558,6 @@ h265ize.processAsPreset = function() {
         logger.verbose('Setting as-preset options...');
 
         switch (args.asPreset) {
-            case 'basic':
-                asPresetParams['preset'] = 'fast';
-                asPresetParams['quality'] = '19';
-                break;
-
             case 'anime':
                 asPresetParams['preset'] = 'medium';
                 asPresetParams['quality'] = '19';
@@ -930,16 +945,138 @@ h265ize.processVideo = function(video) {
                     }
                 }
 
+                // Make sure we are only attempting to use 8 bit with fallback
+                // binary
+                if (usingFallbackFfmpeg) {
+                    let options = command._currentOutput.options.get();
+                    let selectedPixFmt = options[options.indexOf('-pix_fmt') + 1];
+                    if (selectedPixFmt !== 'yuv420p') {
+                        return reject({
+                            level: 'error',
+                            message: 'Bit depth about 8 bit are not supported by the fallback ffmpeg library. Try installing ffmpeg.'
+                        });
+                    }
+                }
+
                 resolve(data);
             });
         };
 
-        let normalizeVolume = function(data) {
-            // ffmpeg -i video.mkv -filter_complex "[0:a:0]volumedetect" -filter_complex "[0:a:1]volumedetect" -f null -map 0:a:0 -map 0:a:1 -
+        let normalizeAudio = function(data) {
+            return new Promise(function(resolve, reject) {
+
+                if (args.normalizeLevel < 3) {
+                    return resolve(data);
+                }
+
+                h265ize.statusUpdate(video, 'normalizeAudio');
+                logger.verbose('Normalizing Audio...');
+
+                let commandIndex;
+
+                let volumeDetectCommand = new ffmpeg(video, {
+                        logger: logger
+                    }).inputOptions('-hide_banner').format('null').output('-')
+                    .on('start', function(commandLine) {
+                        logger.debug('Running Query:', commandLine);
+                    })
+                    .on('error', function(err, stdout, stderr) {
+                        temp.commandQueue.splice(commandIndex, 1);
+                        logger.debug(err.stack);
+
+                        logger.debug(stderr);
+
+                        if (err.message.startsWith('ffmpeg was killed with signal'))
+                            reject('ENDING');
+                        else
+                            reject({
+                                level: 'error',
+                                message: err.message
+                            });
+                    });
+                let vdc = volumeDetectCommand;
+
+                // Only map streams we are going to work on
+                _.each(data.streams.audioStreams, function(stream, i) {
+                    vdc.outputOptions('-map', stream.input + ':' + stream.index);
+                });
+
+
+                /************ This is where the normalization detection happens ***/
+
+                //
+                if (args.normalizeLevel >= 5) {
+
+                }
+
+                //
+                else if (args.normalizeLevel >= 4) {
+
+                    logger.error('Loudnorm audio normalization is currently not supported by ffmpeg stable. Please lower normalization-level to 3.');
+                    cleanUp(true);
+
+                    // Oh loudnorm multipass, lets begin
+                    _.each(data.streams.audioStreams, function(stream, i) {
+                        vdc.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json');
+                    });
+
+                    vdc.on('end', function(stderr) {
+                        temp.commandQueue.splice(commandIndex, 1);
+                        logger.debug(stderr);
+                        process.exit(0);
+                        return resolve(data);
+                    });
+
+                    if (!args.parallel) {
+                        commandIndex = temp.commandQueue.push(vdc) - 1;
+                        vdc.run();
+                    }
+                }
+
+                // "simple" audio RMS-based normalization to -2.0 dBFS
+                else if (args.normalizeLevel >= 3) {
+                    const volumeRegexp = /max_volume: (-?[0-9]+\.[0-9]+)/g;
+                    let volumeLevels = [];
+                    _.each(data.streams.audioStreams, function(stream, i) {
+                        vdc.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']volumedetect');
+                    });
+
+                    vdc.on('stderr', function(stderrLine) {
+                        if (stderrLine.startsWith('[Parsed_volumedetect')) {
+                            let match = volumeRegexp.exec(stderrLine);
+                            if (match) {
+                                volumeLevels.push(parseFloat(match[1]));
+                            }
+                        }
+                        logger.debug(colors.bgMagenta.white('[ffmpeg]'), stderrLine);
+                    }).on('end', function(stderr) {
+                        temp.commandQueue.splice(commandIndex, 1);
+                        _.each(data.streams.audioStreams, function(stream, i) {
+                            let volume = volumeLevels[i] * -1 - 2.0;
+                            command.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']volume=' + volume + 'dB');
+                            command.outputOptions('-c:' + stream.input + ':' + stream.index, 'libfdk_aac');
+                            // Hardcoded bitrate
+                            let bitrate = 128;
+                            command.outputOptions('-b:' + stream.input + ':' + stream.index, bitrate * stream.channels + 'k');
+                        });
+                        return resolve(data);
+                    });
+
+                    if (!args.parallel) {
+                        commandIndex = temp.commandQueue.push(vdc) - 1;
+                        vdc.run();
+                    }
+                }
+
+            });
         };
 
         let autoCrop = function(data) {
             return new Promise(function(resolve, reject) {
+                if (args.normalizeLevel < 1) {
+                    return resolve(data);
+                }
+
                 h265ize.statusUpdate(video, 'autoCrop');
                 logger.verbose('Detecting auto crop...');
 
@@ -952,22 +1089,16 @@ h265ize.processVideo = function(video) {
                         let cropDetectCommand = new ffmpeg(video, {
                                 logger: logger
                             }).outputOptions('-map', data.videoStream.input + ':' + data.videoStream.index)
-                            .videoFilters("cropdetect=0.094:16:0").frames(2).format('null').output('-');
+                            .videoFilters("cropdetect=0.094:16:0").format('null').output('-');
 
                         if (fallback) {
-                            logger.warn('Initial crop detection failed! Running current crop detection in fallback mode. This is significantly slower.');
-                            cropDetectCommand.seekOutput(start);
+                            logger.warn('Crop detection failed! Running crop detection in fallback mode. This is significantly slower.');
                         }
                         else {
-                            cropDetectCommand.seekInput(start);
+                            cropDetectCommand.frames(2).seekInput(start);
                         }
 
                         let commandIndex, crop = {};
-
-                        if (!args.parallel) {
-                            commandIndex = temp.commandQueue.push(cropDetectCommand) - 1;
-                            cropDetectCommand.run();
-                        }
 
                         cropDetectCommand
                             .on('start', function(commandLine) {
@@ -978,22 +1109,21 @@ h265ize.processVideo = function(video) {
 
                                 let match = cropRegexp.exec(stderr);
                                 if (match === null) {
-
-                                    if (fallback)
-                                        return reject({
-                                            level: 'error',
-                                            message: 'Could not run crop detection.'
-                                        });
-                                    else
-                                        return detectCrop(start, true).then(resolve, reject);
+                                    return reject({
+                                        level: 'error',
+                                        message: 'Could not run crop detection.'
+                                    });
                                 }
 
-                                crop.w = parseInt(match[1]);
-                                crop.h = parseInt(match[2]);
-                                crop.x = parseInt(match[3]);
-                                crop.y = parseInt(match[4]);
+                                crop.w = parseInt(match[1], 10);
+                                crop.h = parseInt(match[2], 10);
+                                crop.x = parseInt(match[3], 10);
+                                crop.y = parseInt(match[4], 10);
                                 resolve(crop);
                             })
+                            // .on('stderr', function(line) {
+                            //     logger.debug(line);
+                            // })
                             .on('error', function(err, stdout, stderr) {
                                 temp.commandQueue.splice(commandIndex, 1);
                                 logger.debug(err.stack);
@@ -1006,10 +1136,17 @@ h265ize.processVideo = function(video) {
                                         message: err.message
                                     });
                             });
+
+                        if (!args.parallel) {
+                            commandIndex = temp.commandQueue.push(cropDetectCommand) - 1;
+                            cropDetectCommand.run();
+                        }
                     });
                 }
 
-                let i = 1,
+                // 
+                let i = intervals,
+                    counter = 1,
                     cropDetections = [];
 
                 // This just runs all the ffmpeg crop detections in sync so you
@@ -1017,8 +1154,18 @@ h265ize.processVideo = function(video) {
                 function syncHandler(crop) {
                     if (crop)
                         cropDetections.push(crop);
-                    if (i <= intervals)
-                        detectCrop(interval * i++).then(syncHandler, reject);
+                    if (i > 0) {
+                        logger.info('Crop Detection:', (counter++) + '/' + intervals, {
+                            __clearLine: true
+                        });
+                        let startTime = interval * i--;
+                        detectCrop(startTime).then(syncHandler, function() {
+                            return detectCrop(startTime, true).then(function(crop) {
+                                cropDetections.push(crop);
+                                cropDetectionComplete(cropDetections);
+                            }, reject);
+                        });
+                    }
                     else
                         cropDetectionComplete(cropDetections);
                 }
@@ -1047,6 +1194,9 @@ h265ize.processVideo = function(video) {
                             y = val.y;
                     });
 
+                    if (width !== data.videoStream.width || height !== data.videoStream.height) {
+                        logger.alert('Output will be cropped to', width + 'x' + height);
+                    }
                     command.videoFilters('crop=' + width + ':' + height + ':' + x + ':' + y);
                     resolve(data);
                 }
@@ -1083,8 +1233,9 @@ h265ize.processVideo = function(video) {
                     let normalizedLanguage = normalizeStreamLanguage(stream);
 
                     command.outputOptions('-map', stream.input + ':' + stream.index);
-                    if (!(audioTitle) && args.autoAudioTitles) {
-                        let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
+                    if (!(audioTitle) && args.autoAudioTitles && args.normalizeLevel >= 2) {
+
+                        let channelsFormated = getFormatedChannels(stream.channels);
                         let newTitle = normalizedLanguage + ' ' + stream.codec_name.toUpperCase() + ((stream.profile && stream.profile !== 'unknown') ? (' ' + stream.profile) : '') + ' (' + channelsFormated + ')';
                         logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
                         command.outputOptions('-metadata:s:a:' + stream.index, 'title="' + newTitle + '"');
@@ -1092,7 +1243,7 @@ h265ize.processVideo = function(video) {
 
                     // Set default audio
                     if (data.defaultAudioIndex && data.defaultAudioIndex === stream.index) {
-                        command.outputOptions('-metadata:s:a:' + i, 'DISPOSITION:default=1');
+                        command.outputOptions('-metadata:s:' + stream.input + ':' + stream.index, 'DISPOSITION:default=1');
                     }
 
                     let extraInfo = {
@@ -1121,11 +1272,11 @@ h265ize.processVideo = function(video) {
 
 
                     command.outputOptions('-map', stream.input + ':' + stream.index);
-                    if (!getStreamTitle(stream) && args.autoSubtitleTitles) {
+                    if (!getStreamTitle(stream) && args.autoSubtitleTitles && args.normalizeLevel >= 2) {
                         logger.alert('Subtitle does not have a title. Title set to', normalizedLanguage + '.');
-                        command.outputOptions('-metadata:s:s:' + i, 'title=' + normalizedLanguage);
+                        command.outputOptions('-metadata:s:' + stream.input + ':' + stream.index, 'title=' + normalizedLanguage);
                     }
-                    command.outputOptions('-metadata:s:s:' + i, 'DISPOSITION:default=0');
+                    command.outputOptions('-metadata:s:' + stream.input + ':' + stream.index, 'DISPOSITION:default=0');
                     logger.debug('Subtitle stream with index', stream.index, 'mapped.', {
                         title: getStreamTitle(stream),
                         language: normalizedLanguage,
@@ -1155,7 +1306,7 @@ h265ize.processVideo = function(video) {
                 _.each(data.streams.audioStreams, function(stream, i) {
                     if (stream.codec_name !== 'flac' || args.forceHeAudio) {
                         logger.verbose('Audio stream', colors.yellow(getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'will be encoded to HE Audio.');
-                        let bitrate = 80 * stream.channels / 2;
+                        let bitrate = HEAudioBitrate * stream.channels;
                         command.outputOptions('-c:a:' + i, 'libopus');
                         command.outputOptions('-b:a:' + i, bitrate + 'k');
                         command.outputOptions('-frame_duration', 60);
@@ -1166,14 +1317,14 @@ h265ize.processVideo = function(video) {
                         }
 
 
-                        // Handle settings a new title
+                        // Handle setting a new title
                         let audioTitle = getStreamTitle(stream);
                         let normalizedLanguage = normalizeStreamLanguage(stream);
-                        if (!(audioTitle) && args.autoAudioTitles) {
-                            let channelsFormated = stream.channels === 2 ? 'Stereo' : stream.channels % 2 ? (stream.channels - 1) + '.1 Channel' : stream.channels + '.0 Channel';
+                        if (!(audioTitle) && args.autoAudioTitles && args.normalizeLevel >= 2) {
+                            let channelsFormated = getFormatedChannels(stream.channels);
                             let newTitle = normalizedLanguage + ' OPUS (' + channelsFormated + ')';
                             logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
-                            command.outputOptions('-metadata:s:a:' + stream.index, 'title="' + newTitle);
+                            command.outputOptions('-metadata:s:a:' + stream.index, 'title="' + newTitle + '"');
                         }
                     }
                     else {
@@ -1241,11 +1392,6 @@ h265ize.processVideo = function(video) {
 
                 command.outputOptions('-x265-params', x265Params);
 
-                if (!args.parallel) {
-                    commandIndex = temp.commandQueue.push(command) - 1;
-                    command.save(tempOutput);
-                }
-
                 command
                     .on('progress', function(progress) {
                         let elapsed = moment.duration(moment().diff(startTime), 'milliseconds');
@@ -1292,6 +1438,7 @@ h265ize.processVideo = function(video) {
                     })
                     .on('error', function(err, stdout, stderr) {
                         temp.commandQueue.splice(commandIndex, 1);
+                        // logger.debug(colors.bgMagenta.white('[ffmpeg]'), stderr);
                         logger.debug(err.stack);
 
                         if (err.message.startsWith('ffmpeg was killed with signal'))
@@ -1303,9 +1450,12 @@ h265ize.processVideo = function(video) {
                             });
                     });
 
-                if (args.parallel) {
-                    temp.commandQueue.push(command);
+                if (!args.parallel) {
+                    commandIndex = temp.commandQueue.push(command) - 1;
+                    command.save(tempOutput);
                 }
+                else
+                    temp.commandQueue.push(command);
             });
         };
 
@@ -1414,6 +1564,30 @@ h265ize.processVideo = function(video) {
             });
         };
 
+
+        let createSample = function(data) {
+            return new Promise(function(resolve, reject) {
+                h265ize.statusUpdate(video, 'sample');
+
+                logger.verbose('Creating sample...');
+
+                let command = new ffmpeg(tempOutput);
+                let commandIndex = temp.commandQueue.push(command);
+
+                command.seekInput(data.metadata.format.duration / 2).duration(args.previewLength / 1000).outputOptions('-c', 'copy');
+
+                command
+                    .on('start', function(commandLine) {
+                        temp.files.push(tempOutput);
+                        logger.debug('Running Query:', commandLine);
+                    })
+                    .on('end', function() {
+                        temp.commandQueue.splice(commandIndex, 1);
+                        resolve(data);
+                    });
+            });
+        };
+
         // This is where the actual processing happens
 
         getMetadata(video)
@@ -1434,8 +1608,9 @@ h265ize.processVideo = function(video) {
 
         // set video bit depth (8bit, 10bit, 12bit, etc.)
         .then(setVideoBitDepth)
-            .then(autoCrop)
             .then(mapStreams)
+            .then(autoCrop)
+            .then(normalizeAudio)
             .then(mapHEAudio)
             .then(setArguments)
             .then(encodeVideo)
@@ -1525,6 +1700,21 @@ function momentizeTimemark(timemark) {
     let seconds = parseFloat(timemark.substr(timemark.lastIndexOf(':') + 1));
 
     return moment.duration().add(hours, 'h').add(minutes, 'm').add(seconds, 's');
+}
+
+function getFormatedChannels(channels) {
+    if (channels === 1) {
+        return 'Mono';
+    }
+    else if (channels === 2) {
+        return 'Stereo';
+    }
+    else if (channels % 2) {
+        return (channels - 1) + '.1 Channel';
+    }
+    else {
+        return channels + '.0 Channel';
+    }
 }
 
 function userSetOption(option) {
@@ -1689,9 +1879,9 @@ function normalizeStreamLanguage(stream) {
 
     switch (lang.length) {
         case 2:
-            return alpha2Languages[lang] || "Unknown";
+            return languages.alpha2Languages[lang] || "Unknown";
         case 3:
-            return alpha3Languages[lang] || "Unknown";
+            return languages.alpha3Languages[lang] || "Unknown";
         default:
             return lang.capitalize() || "Unknown";
     }
@@ -1703,9 +1893,9 @@ function normalizeLanguage(lang) {
 
     switch (lang.length) {
         case 2:
-            return alpha2Languages[lang] || "Unknown";
+            return languages.alpha2Languages[lang] || "Unknown";
         case 3:
-            return alpha3Languages[lang] || "Unknown";
+            return languages.alpha3Languages[lang] || "Unknown";
         default:
             return lang.capitalize() || "Unknown";
     }
@@ -1766,377 +1956,3 @@ function appendToStatsFile(data) {
     logger.debug('Writing to stats file:', data);
     statsFile.write('\n' + data.join(','));
 }
-
-var alpha2Languages = {
-    "aa": "Afar",
-    "ab": "Abkhazian",
-    "ae": "Avestan",
-    "af": "Afrikaans",
-    "ak": "Akan",
-    "am": "Amharic",
-    "an": "Aragonese",
-    "ar": "Arabic",
-    "as": "Assamese",
-    "av": "Avaric",
-    "ay": "Aymara",
-    "az": "Azerbaijani",
-    "ba": "Bashkir",
-    "be": "Belarusian",
-    "bg": "Bulgarian",
-    "bh": "Bihari languages",
-    "bi": "Bislama",
-    "bm": "Bambara",
-    "bn": "Bengali",
-    "bo": "Tibetan",
-    "br": "Breton",
-    "bs": "Bosnian",
-    "ca": "Catalan; Valencian",
-    "ce": "Chechen",
-    "ch": "Chamorro",
-    "co": "Corsican",
-    "cr": "Cree",
-    "cs": "Czech",
-    "cu": "Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic",
-    "cv": "Chuvash",
-    "cy": "Welsh",
-    "da": "Danish",
-    "de": "German",
-    "dv": "Divehi; Dhivehi; Maldivian",
-    "dz": "Dzongkha",
-    "ee": "Ewe",
-    "el": "Greek: Modern (1453-)",
-    "en": "English",
-    "eo": "Esperanto",
-    "es": "Spanish; Castilian",
-    "et": "Estonian",
-    "eu": "Basque",
-    "fa": "Persian",
-    "ff": "Fulah",
-    "fi": "Finnish",
-    "fj": "Fijian",
-    "fo": "Faroese",
-    "fr": "French",
-    "fy": "Western Frisian",
-    "ga": "Irish",
-    "gd": "Gaelic; Scottish Gaelic",
-    "gl": "Galician",
-    "gn": "Guarani",
-    "gu": "Gujarati",
-    "gv": "Manx",
-    "ha": "Hausa",
-    "he": "Hebrew",
-    "hi": "Hindi",
-    "ho": "Hiri Motu",
-    "hr": "Croatian",
-    "ht": "Haitian; Haitian Creole",
-    "hu": "Hungarian",
-    "hy": "Armenian",
-    "hz": "Herero",
-    "ia": "Interlingua (International Auxiliary Language Association)",
-    "id": "Indonesian",
-    "ie": "Interlingue; Occidental",
-    "ig": "Igbo",
-    "ii": "Sichuan Yi; Nuosu",
-    "ik": "Inupiaq",
-    "io": "Ido",
-    "is": "Icelandic",
-    "it": "Italian",
-    "iu": "Inuktitut",
-    "ja": "Japanese",
-    "jv": "Javanese",
-    "ka": "Georgian",
-    "kg": "Kongo",
-    "ki": "Kikuyu; Gikuyu",
-    "kj": "Kuanyama; Kwanyama",
-    "kk": "Kazakh",
-    "kl": "Kalaallisut; Greenlandic",
-    "km": "Central Khmer",
-    "kn": "Kannada",
-    "ko": "Korean",
-    "kr": "Kanuri",
-    "ks": "Kashmiri",
-    "ku": "Kurdish",
-    "kv": "Komi",
-    "kw": "Cornish",
-    "ky": "Kirghiz; Kyrgyz",
-    "la": "Latin",
-    "lb": "Luxembourgish; Letzeburgesch",
-    "lg": "Ganda",
-    "li": "Limburgan; Limburger; Limburgish",
-    "ln": "Lingala",
-    "lo": "Lao",
-    "lt": "Lithuanian",
-    "lu": "Luba-Katanga",
-    "lv": "Latvian",
-    "mg": "Malagasy",
-    "mh": "Marshallese",
-    "mi": "Maori",
-    "mk": "Macedonian",
-    "ml": "Malayalam",
-    "mn": "Mongolian",
-    "mr": "Marathi",
-    "ms": "Malay",
-    "mt": "Maltese",
-    "my": "Burmese",
-    "na": "Nauru",
-    "nb": "Bokmål: Norwegian; Norwegian Bokmål",
-    "nd": "Ndebele: North; North Ndebele",
-    "ne": "Nepali",
-    "ng": "Ndonga",
-    "nl": "Dutch; Flemish",
-    "nn": "Norwegian Nynorsk; Nynorsk: Norwegian",
-    "no": "Norwegian",
-    "nr": "Ndebele: South; South Ndebele",
-    "nv": "Navajo; Navaho",
-    "ny": "Chichewa; Chewa; Nyanja",
-    "oc": "Occitan (post 1500); Provençal",
-    "oj": "Ojibwa",
-    "om": "Oromo",
-    "or": "Oriya",
-    "os": "Ossetian; Ossetic",
-    "pa": "Panjabi; Punjabi",
-    "pi": "Pali",
-    "pl": "Polish",
-    "ps": "Pushto; Pashto",
-    "pt": "Portuguese",
-    "qu": "Quechua",
-    "rm": "Romansh",
-    "rn": "Rundi",
-    "ro": "Romanian; Moldavian; Moldovan",
-    "ru": "Russian",
-    "rw": "Kinyarwanda",
-    "sa": "Sanskrit",
-    "sc": "Sardinian",
-    "sd": "Sindhi",
-    "se": "Northern Sami",
-    "sg": "Sango",
-    "si": "Sinhala; Sinhalese",
-    "sk": "Slovak",
-    "sl": "Slovenian",
-    "sm": "Samoan",
-    "sn": "Shona",
-    "so": "Somali",
-    "sq": "Albanian",
-    "sr": "Serbian",
-    "ss": "Swati",
-    "st": "Sotho: Southern",
-    "su": "Sundanese",
-    "sv": "Swedish",
-    "sw": "Swahili",
-    "ta": "Tamil",
-    "te": "Telugu",
-    "tg": "Tajik",
-    "th": "Thai",
-    "ti": "Tigrinya",
-    "tk": "Turkmen",
-    "tl": "Tagalog",
-    "tn": "Tswana",
-    "to": "Tonga (Tonga Islands)",
-    "tr": "Turkish",
-    "ts": "Tsonga",
-    "tt": "Tatar",
-    "tw": "Twi",
-    "ty": "Tahitian",
-    "ug": "Uighur; Uyghur",
-    "uk": "Ukrainian",
-    "ur": "Urdu",
-    "uz": "Uzbek",
-    "ve": "Venda",
-    "vi": "Vietnamese",
-    "vo": "Volapük",
-    "wa": "Walloon",
-    "wo": "Wolof",
-    "xh": "Xhosa",
-    "yi": "Yiddish",
-    "yo": "Yoruba",
-    "za": "Zhuang; Chuang",
-    "zh": "Chinese",
-    "zu": "Zulu",
-    "un": "Unknown",
-};
-var alpha3Languages = {
-    "aar": "Afar",
-    "abk": "Abkhazian",
-    "afr": "Afrikaans",
-    "aka": "Akan",
-    "alb": "Albanian",
-    "amh": "Amharic",
-    "ara": "Arabic",
-    "arg": "Aragonese",
-    "arm": "Armenian",
-    "asm": "Assamese",
-    "ava": "Avaric",
-    "ave": "Avestan",
-    "aym": "Aymara",
-    "aze": "Azerbaijani",
-    "bak": "Bashkir",
-    "bam": "Bambara",
-    "baq": "Basque",
-    "bel": "Belarusian",
-    "ben": "Bengali",
-    "bih": "Bihari languages",
-    "bis": "Bislama",
-    "bos": "Bosnian",
-    "bre": "Breton",
-    "bul": "Bulgarian",
-    "bur": "Burmese",
-    "cat": "Catalan; Valencian",
-    "cha": "Chamorro",
-    "che": "Chechen",
-    "chi": "Chinese",
-    "chu": "Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic",
-    "chv": "Chuvash",
-    "cor": "Cornish",
-    "cos": "Corsican",
-    "cre": "Cree",
-    "cze": "Czech",
-    "dan": "Danish",
-    "div": "Divehi; Dhivehi; Maldivian",
-    "dut": "Dutch; Flemish",
-    "dzo": "Dzongkha",
-    "eng": "English",
-    "epo": "Esperanto",
-    "est": "Estonian",
-    "ewe": "Ewe",
-    "fao": "Faroese",
-    "fij": "Fijian",
-    "fin": "Finnish",
-    "fre": "French",
-    "fry": "Western Frisian",
-    "ful": "Fulah",
-    "geo": "Georgian",
-    "ger": "German",
-    "gla": "Gaelic; Scottish Gaelic",
-    "gle": "Irish",
-    "glg": "Galician",
-    "glv": "Manx",
-    "gre": "Greek, Modern (1453-)",
-    "grn": "Guarani",
-    "guj": "Gujarati",
-    "hat": "Haitian; Haitian Creole",
-    "hau": "Hausa",
-    "heb": "Hebrew",
-    "her": "Herero",
-    "hin": "Hindi",
-    "hmo": "Hiri Motu",
-    "hrv": "Croatian",
-    "hun": "Hungarian",
-    "ibo": "Igbo",
-    "ice": "Icelandic",
-    "ido": "Ido",
-    "iii": "Sichuan Yi; Nuosu",
-    "iku": "Inuktitut",
-    "ile": "Interlingue; Occidental",
-    "ina": "Interlingua (International Auxiliary Language Association)",
-    "ind": "Indonesian",
-    "ipk": "Inupiaq",
-    "ita": "Italian",
-    "jav": "Javanese",
-    "jpn": "Japanese",
-    "kal": "Kalaallisut; Greenlandic",
-    "kan": "Kannada",
-    "kas": "Kashmiri",
-    "kau": "Kanuri",
-    "kaz": "Kazakh",
-    "khm": "Central Khmer",
-    "kik": "Kikuyu; Gikuyu",
-    "kin": "Kinyarwanda",
-    "kir": "Kirghiz; Kyrgyz",
-    "kom": "Komi",
-    "kon": "Kongo",
-    "kor": "Korean",
-    "kua": "Kuanyama; Kwanyama",
-    "kur": "Kurdish",
-    "lao": "Lao",
-    "lat": "Latin",
-    "lav": "Latvian",
-    "lim": "Limburgan; Limburger; Limburgish",
-    "lin": "Lingala",
-    "lit": "Lithuanian",
-    "ltz": "Luxembourgish; Letzeburgesch",
-    "lub": "Luba-Katanga",
-    "lug": "Ganda",
-    "mac": "Macedonian",
-    "mah": "Marshallese",
-    "mal": "Malayalam",
-    "mao": "Maori",
-    "mar": "Marathi",
-    "may": "Malay",
-    "mlg": "Malagasy",
-    "mlt": "Maltese",
-    "mon": "Mongolian",
-    "nau": "Nauru",
-    "nav": "Navajo; Navaho",
-    "nbl": "Ndebele, South; South Ndebele",
-    "nde": "Ndebele, North; North Ndebele",
-    "ndo": "Ndonga",
-    "nep": "Nepali",
-    "nno": "Norwegian Nynorsk; Nynorsk, Norwegian",
-    "nob": "Bokmål, Norwegian; Norwegian Bokmål",
-    "nor": "Norwegian",
-    "nya": "Chichewa; Chewa; Nyanja",
-    "oci": "Occitan (post 1500); Provençal",
-    "oji": "Ojibwa",
-    "ori": "Oriya",
-    "orm": "Oromo",
-    "oss": "Ossetian; Ossetic",
-    "pan": "Panjabi; Punjabi",
-    "per": "Persian",
-    "pli": "Pali",
-    "pol": "Polish",
-    "por": "Portuguese",
-    "pus": "Pushto; Pashto",
-    "que": "Quechua",
-    "roh": "Romansh",
-    "rum": "Romanian; Moldavian; Moldovan",
-    "run": "Rundi",
-    "rus": "Russian",
-    "sag": "Sango",
-    "san": "Sanskrit",
-    "sin": "Sinhala; Sinhalese",
-    "slo": "Slovak",
-    "slv": "Slovenian",
-    "sme": "Northern Sami",
-    "smo": "Samoan",
-    "sna": "Shona",
-    "snd": "Sindhi",
-    "som": "Somali",
-    "sot": "Sotho, Southern",
-    "spa": "Spanish; Castilian",
-    "srd": "Sardinian",
-    "srp": "Serbian",
-    "ssw": "Swati",
-    "sun": "Sundanese",
-    "swa": "Swahili",
-    "swe": "Swedish",
-    "tah": "Tahitian",
-    "tam": "Tamil",
-    "tat": "Tatar",
-    "tel": "Telugu",
-    "tgk": "Tajik",
-    "tgl": "Tagalog",
-    "tha": "Thai",
-    "tib": "Tibetan",
-    "tir": "Tigrinya",
-    "ton": "Tonga (Tonga Islands)",
-    "tsn": "Tswana",
-    "tso": "Tsonga",
-    "tuk": "Turkmen",
-    "tur": "Turkish",
-    "twi": "Twi",
-    "uig": "Uighur; Uyghur",
-    "ukr": "Ukrainian",
-    "urd": "Urdu",
-    "uzb": "Uzbek",
-    "ven": "Venda",
-    "vie": "Vietnamese",
-    "vol": "Volapük",
-    "wel": "Welsh",
-    "wln": "Walloon",
-    "wol": "Wolof",
-    "xho": "Xhosa",
-    "yid": "Yiddish",
-    "yor": "Yoruba",
-    "zha": "Zhuang; Chuang",
-    "zul": "Zulu"
-};
