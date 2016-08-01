@@ -1621,7 +1621,7 @@ h265ize.processVideo = function(video) {
             .then(takeScreenshots)
             .then(function(data) {
                 logger.info('Processing', colors.bold(colors.yellow(pathData.name + '.' + args.outputFormat)), 'complete.');
-                logger.info('Original:', colors.yellow(filesize(data.original.format.size)), '\t', 'New:', colors.yellow(filesize(data.new.format.size)), '\t', 'Precentage:', colors.yellow(data.ratio + '%'));
+                logger.info('Original:', colors.yellow(filesize(data.original.format.size)), '\t', 'New:', colors.yellow(filesize(data.new.format.size)), '\t', 'Percentage:', colors.yellow(data.ratio + '%'));
 
                 if (args.delete)
                     fs.removeSync(video);
@@ -1939,7 +1939,7 @@ function loadStatsFile(path) {
             });
 
             if (err) {
-                stream.write('Encoded Date,Filename,Original Size,New Size,Precentage,Duration of Encode');
+                stream.write('Encoded Date,Filename,Original Size,New Size,Percentage,Duration of Encode');
             }
 
             resolve(stream);
