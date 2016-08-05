@@ -22,6 +22,7 @@ const hasbin = require('hasbin');
 const math = require('mathjs');
 const stripAnsi = require('strip-ansi');
 const keypress = require('keypress');
+const Promise = require("bluebird");
 
 const ffmpegPath = require('ffmpeg-static').path;
 const ffprobePath = require('ffprobe-static').path;
@@ -39,6 +40,7 @@ var h265ize = {},
 var args;
 
 h265ize.runCli = function() {
+    Promise.longStackTraces();
     h265ize.parseOptions()
         .then(h265ize.setupLogger)
         .then(h265ize.init)
@@ -346,8 +348,8 @@ h265ize.setupLogger = function() {
                     colorize: true,
                     label: packageSettings.name,
                     prettyPrint: true,
-                    // handleExceptions: true,
-                    // humanReadableUnhandledException: true,
+                    //handleExceptions: true,
+                    //humanReadableUnhandledException: true,
                     // timestamp: function() {
                     //     return Date.now();
                     // },
@@ -427,6 +429,11 @@ h265ize.init = function() {
             ffmpeg.setFfprobePath(ffprobePath);
         }
 
+        //process.on("unhandledRejection", function(reason, promise) {
+        //    logger.error('Unhandled Error:', reason);
+        //    promise.reject('Unexpect Error');
+        //});
+
         resolve();
     });
 };
@@ -445,10 +452,10 @@ h265ize.preChecks = function() {
 h265ize.handleKeypress = function() {
     return new Promise(function(resolve, reject) {
         logger.verbose('Handling keypresses...');
-        // make `process.stdin` begin emitting "keypress" events 
+        // make `process.stdin` begin emitting "keypress" events
         keypress(process.stdin);
 
-        // listen for the "keypress" event 
+        // listen for the "keypress" event
         process.stdin.on('keypress', function(ch, key) {
             if (key && key.name == 'd') {
                 logger.info('Debugging', !args['debug'] ? 'enabled.' : 'disabled.');
@@ -710,7 +717,7 @@ h265ize.processVideo = function(video) {
         command.outputOptions('-c:s', 'copy');
 
         // Maintain aspect ratio
-        command.keepDAR();
+        //command.keepDAR();
 
         let inputCounter = 0;
         let pass = 0;
@@ -744,7 +751,7 @@ h265ize.processVideo = function(video) {
         let getMetadata = function(path) {
             return new Promise(function(resolve, reject) {
                 h265ize.statusUpdate(video, 'metadata');
-                logger.verbose('Getting video metadata...');
+                logger.verbose('Getting metadata...');
                 ffmpeg.ffprobe(path, function(err, metadata) {
                     if (err) {
                         logger.error(err.message);
@@ -762,11 +769,12 @@ h265ize.processVideo = function(video) {
                         }),
                         size: filesize(metadata.format.size)
                     });
-                    if (!_.isNumber(metadata.format.duration)) {
+
+                    if (metadata.format.format_name !== 'srt' && !_.isNumber(metadata.format.duration)) {
                         logger.alert('Could not retrieve video duration. Computing duration...');
                         new ffmpeg({
                             logger: logger
-                        }).input(video).outputFormat('null').output('-').on('end', function(stdout, stderr) {
+                        }).input(path).outputFormat('null').output('-').on('end', function(stdout, stderr) {
                             let lines = stderr.split('\n');
                             let lastTime = lines[lines.length - 3];
                             let duration = lastTime.match(new RegExp('time=(([0-9]|\:|\.)+) bitrate'))[1];
@@ -870,15 +878,22 @@ h265ize.processVideo = function(video) {
                 _.each(data.streams.subtitleStreams, function(subtitle, i) {
 
                     // Detect dvdsub subtitles
-                    if (subtitle.codec_name === 'dvdsub') {
+                    if (subtitle.codec_name === 'dvdsub' || subtitle.codec_name === 'dvd_subtitle') {
 
                         // Convert dvdsub subtitle to srt
                         trackUpconvertProcesses.push(new Promise(function(resolve, reject) {
                             extractTrack(video, subtitle.index).then(vobsubToSRT).then(function(filePath) {
-                                delete data.streams.subtitleStreams[i];
                                 command.input(filePath);
-                                subtitle.input = ++inputCounter;
-                                resolve();
+                                getMetadata(filePath).then(function(metadata) {
+                                    metadata.streams[0].title = subtitle.title;
+                                    metadata.streams[0].language = subtitle.language;
+                                    metadata.streams[0].tags = subtitle.tags;
+                                    metadata.streams[0].disposition = subtitle.disposition;
+                                    metadata.streams[0].input = ++inputCounter;
+
+                                    data.streams.subtitleStreams[i] = metadata.streams[0];
+                                    resolve();
+                                }, reject);
                             }).catch(reject);
                         }));
                     }
@@ -1144,7 +1159,7 @@ h265ize.processVideo = function(video) {
                     });
                 }
 
-                // 
+                //
                 let i = intervals,
                     counter = 1,
                     cropDetections = [];
@@ -1211,7 +1226,7 @@ h265ize.processVideo = function(video) {
                 data.defaultSubtitleIndex = null;
 
                 command.outputOptions('-map', data.videoStream.input + ':' + data.videoStream.index);
-                logger.debug('Video stream with index', data.videoStream.index, 'mapped.', {
+                logger.debug('Video stream', data.videoStream.input+':'+data.videoStream.index, 'mapped.', {
                     size: data.videoStream.width + 'x' + data.videoStream.height,
                     codec: data.videoStream.codec_long_name,
                     profile: data.videoStream.profile,
@@ -1258,36 +1273,40 @@ h265ize.processVideo = function(video) {
                     else
                         extraInfo['bit-depth'] = stream.bits_per_raw_sample;
 
-                    logger.debug('Audio stream with index', stream.index, 'mapped.', extraInfo);
+                    logger.debug('Audio stream', stream.input+':'+stream.index, 'mapped.', extraInfo);
                 });
 
                 // Subtitle streams
                 _.each(data.streams.subtitleStreams, function(stream, i) {
 
+                    console.log(1)
+                    logger.info(normalizeStreamLanguage(stream))
                     // Handle native language
                     let normalizedLanguage = normalizeStreamLanguage(stream);
                     if (normalizedLanguage === normalizeLanguage(args['native-language']) && !data.defaultAudioIndex && !data.defaultSubtitleIndex) {
                         data.defaultSubtitleIndex = stream.index;
                     }
 
-
+                    console.log(2)
                     command.outputOptions('-map', stream.input + ':' + stream.index);
                     if (!getStreamTitle(stream) && args.autoSubtitleTitles && args.normalizeLevel >= 2) {
                         logger.alert('Subtitle does not have a title. Title set to', normalizedLanguage + '.');
                         command.outputOptions('-metadata:s:' + stream.input + ':' + stream.index, 'title=' + normalizedLanguage);
                     }
+                    console.log(3)
                     command.outputOptions('-metadata:s:' + stream.input + ':' + stream.index, 'DISPOSITION:default=0');
-                    logger.debug('Subtitle stream with index', stream.index, 'mapped.', {
+                    logger.debug('Subtitle stream', stream.input+':'+stream.index, 'mapped.', {
                         title: getStreamTitle(stream),
                         language: normalizedLanguage,
                         codec: stream.codec_long_name
                     });
+                    console.log(4)
                 });
 
                 // Other streams (Attachments: fonts, pictures, etc.)
                 _.each(data.streams.otherStreams, function(stream, i) {
                     command.outputOptions('-map', stream.input + ':' + stream.index);
-                    logger.debug('Other stream with index', stream.index, 'mapped.');
+                    logger.debug('Other stream', stream.input+':'+stream.index, 'mapped.');
                 });
 
                 resolve(data);
@@ -1649,7 +1668,7 @@ h265ize.processVideo = function(video) {
                     cleanUp(true);
                 }
                 else {
-                    logger[err.level](err.message);
+                    logger[err.level || 'error'](err.message);
                     resolve();
                 }
             });
@@ -1710,10 +1729,10 @@ function getFormatedChannels(channels) {
         return 'Stereo';
     }
     else if (channels % 2) {
-        return (channels - 1) + '.1 Channel';
+        return channels + '.0 Channel';
     }
     else {
-        return channels + '.0 Channel';
+        return (channels - 1) + '.1 Channel';
     }
 }
 
@@ -1774,8 +1793,8 @@ function createListString(files) {
 }
 
 function cleanUp(ending) {
-    logger.verbose('Cleaning up temp files...');
     if (!args.debug) {
+        logger.verbose('Cleaning up temp files...');
         _.each(temp.files, function(file) {
             try {
                 fs.unlinkSync(file);
@@ -1785,10 +1804,6 @@ function cleanUp(ending) {
                     logger.error(err);
             }
         });
-    }
-    else {
-        if (temp.files.length)
-            logger.alert('The following temporary files were not deleted because you are in debug mode:', temp.files);
     }
 
     if (ending) {
@@ -1815,16 +1830,15 @@ function extractTrack(videoPath, trackIndex) {
                 message: 'MKVEXTRACT_NOT_INSTALLED'
             });
         }
-        logger.debug('Extracting track', trackIndex, 'from', base);
 
         let base = path.basename(videoPath);
-        let output = path.resolve(args.tempDirectory, base + '-track' + trackIndex);
+        let output = path.join(args.tempDirectory, 'TRACK'+trackIndex+'_'+base.replace(/\.[^/.]+$/, ""));
 
-        spawn('mkvextract', ['track', trackIndex + ':' + output])
+        logger.debug('Extracting track', trackIndex, 'from', base, '. Please wait...');
+        let process = spawn('mkvextract', ['tracks', videoPath, trackIndex + ':' + output])
             .on('close', (code) => {
                 if (code !== 0) {
                     logger.warn('mkvextract exited with error code:', code);
-                    logger.warn('Skipping video', path.filename + '.');
                     return reject({
                         level: 'error',
                         message: 'MKVEXTRACT_ERROR'
@@ -1832,9 +1846,20 @@ function extractTrack(videoPath, trackIndex) {
                 }
                 resolve(output);
             });
+            process.stdout.on('data', function(data) {
+                outputHandler('mkvextract', data)
+            });
+            process.stderr.on('data', function(data) {
+                outputHandler('mkvextract', data)
+            });
 
     });
 }
+
+function outputHandler(tool, data) {
+    logger.debug(colors.bgMagenta.white('['+tool+']'), data.toString('utf8'), {__clearLine: true});
+}
+
 
 function addx265Options(options) {
     args['x'] = options + (args['x'] ? (':' + args['x']) : '');
@@ -1851,19 +1876,25 @@ function vobsubToSRT(filePath) {
                 message: 'VOBSUB2SRT_NOT_INSTALLED'
             });
         }
-        logger.debug('Converting', filePath, 'to srt file.');
+        logger.debug('Converting', filePath, 'to srt file. Please wait...');
+        let filePathWithoutExtension = filePath.replace(/\.[^/.]+$/, "");
 
-        spawn('vobsub2srt', [filePath])
+        let process = spawn('vobsub2srt', [filePathWithoutExtension])
             .on('close', (code) => {
                 if (code !== 0) {
                     logger.warn('vobsub2srt exited with error code:', code);
-                    logger.warn('Skipping video', path.filename + '.');
                     return reject({
                         level: 'error',
                         message: 'VOBSUB2SRT_ERROR'
                     });
                 }
-                resolve(filePath + '.srt');
+                resolve(filePathWithoutExtension + '.srt');
+            })
+            process.stdout.on('data', function(data) {
+                outputHandler('vobsub2srt', data)
+            });
+            process.stderr.on('data', function(data) {
+                outputHandler('vobsub2srt', data)
             });
     });
 }
@@ -1874,22 +1905,12 @@ function getStreamTitle(stream) {
 
 function normalizeStreamLanguage(stream) {
     let lang = stream.language || stream.tags ? stream.tags.language : undefined;
-    if (typeof lang === 'undefined')
-        return 'Unknown';
-
-    switch (lang.length) {
-        case 2:
-            return languages.alpha2Languages[lang] || "Unknown";
-        case 3:
-            return languages.alpha3Languages[lang] || "Unknown";
-        default:
-            return lang.capitalize() || "Unknown";
-    }
+    return normalizeLanguage(lang);
 }
 
 function normalizeLanguage(lang) {
     if (typeof lang === 'undefined')
-        return '';
+        return 'Unknown';
 
     switch (lang.length) {
         case 2:
