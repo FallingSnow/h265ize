@@ -1279,7 +1279,6 @@ h265ize.processVideo = function(video) {
                 // Subtitle streams
                 _.each(data.streams.subtitleStreams, function(stream, i) {
 
-                    console.log(1)
                     logger.info(normalizeStreamLanguage(stream))
                     // Handle native language
                     let normalizedLanguage = normalizeStreamLanguage(stream);
@@ -1287,20 +1286,17 @@ h265ize.processVideo = function(video) {
                         data.defaultSubtitleIndex = stream.index;
                     }
 
-                    console.log(2)
                     command.outputOptions('-map', stream.input + ':' + stream.index);
                     if (!getStreamTitle(stream) && args.autoSubtitleTitles && args.normalizeLevel >= 2) {
                         logger.alert('Subtitle does not have a title. Title set to', normalizedLanguage + '.');
                         command.outputOptions('-metadata:s:' + stream.input + ':' + stream.index, 'title=' + normalizedLanguage);
                     }
-                    console.log(3)
                     command.outputOptions('-metadata:s:' + stream.input + ':' + stream.index, 'DISPOSITION:default=0');
                     logger.debug('Subtitle stream', stream.input+':'+stream.index, 'mapped.', {
                         title: getStreamTitle(stream),
                         language: normalizedLanguage,
                         codec: stream.codec_long_name
                     });
-                    console.log(4)
                 });
 
                 // Other streams (Attachments: fonts, pictures, etc.)
