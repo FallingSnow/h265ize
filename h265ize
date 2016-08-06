@@ -1582,6 +1582,7 @@ h265ize.processVideo = function(video) {
 
                 let command = new ffmpeg(fileOutput);
                 let commandIndex = temp.commandQueue.push(command);
+                let outputDir = path.join(path.dirname(fileOutput), 'screenshots');
 
                 command
                     .on('filenames', function(filenames) {
@@ -1593,10 +1594,16 @@ h265ize.processVideo = function(video) {
                         resolve(data);
                     });
 
-                command.screenshots({
-                    filename: '%f-%i.png',
-                    folder: destinationDirectory,
-                    count: 6
+                fs.ensureDir(outputDir, function(err) {
+                    if (err) {
+                        throw err;
+                    }
+
+                    command.screenshots({
+                        filename: '%b-%i.png',
+                        folder: outputDir,
+                        count: 6
+                    });
                 });
 
             });
