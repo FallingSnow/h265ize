@@ -1210,9 +1210,9 @@ h265ize.processVideo = function(video) {
                     });
 
                     if (width !== data.videoStream.width || height !== data.videoStream.height) {
-                        logger.alert('Output will be cropped to', width + 'x' + height);
+                        logger.alert('Output will be cropped to', width + 'x' + height + '.', 'Originally', data.videoStream.width + 'x' + data.videoStream.height);
+                        command.videoFilters('crop=' + width + ':' + height + ':' + x + ':' + y);
                     }
-                    command.videoFilters('crop=' + width + ':' + height + ':' + x + ':' + y);
                     resolve(data);
                 }
             });
@@ -1226,7 +1226,7 @@ h265ize.processVideo = function(video) {
                 data.defaultSubtitleIndex = null;
 
                 command.outputOptions('-map', data.videoStream.input + ':' + data.videoStream.index);
-                logger.debug('Video stream', data.videoStream.input+':'+data.videoStream.index, 'mapped.', {
+                logger.debug('Video stream', data.videoStream.input + ':' + data.videoStream.index, 'mapped.', {
                     size: data.videoStream.width + 'x' + data.videoStream.height,
                     codec: data.videoStream.codec_long_name,
                     profile: data.videoStream.profile,
@@ -1273,14 +1273,14 @@ h265ize.processVideo = function(video) {
                     else
                         extraInfo['bit-depth'] = stream.bits_per_raw_sample;
 
-                    logger.debug('Audio stream', stream.input+':'+stream.index, 'mapped.', extraInfo);
+                    logger.debug('Audio stream', stream.input + ':' + stream.index, 'mapped.', extraInfo);
                 });
 
                 // Subtitle streams
                 _.each(data.streams.subtitleStreams, function(stream, i) {
 
                     logger.info(normalizeStreamLanguage(stream))
-                    // Handle native language
+                        // Handle native language
                     let normalizedLanguage = normalizeStreamLanguage(stream);
                     if (normalizedLanguage === normalizeLanguage(args['native-language']) && !data.defaultAudioIndex && !data.defaultSubtitleIndex) {
                         data.defaultSubtitleIndex = stream.index;
@@ -1292,7 +1292,7 @@ h265ize.processVideo = function(video) {
                         command.outputOptions('-metadata:s:' + stream.input + ':' + stream.index, 'title=' + normalizedLanguage);
                     }
                     command.outputOptions('-metadata:s:' + stream.input + ':' + stream.index, 'DISPOSITION:default=0');
-                    logger.debug('Subtitle stream', stream.input+':'+stream.index, 'mapped.', {
+                    logger.debug('Subtitle stream', stream.input + ':' + stream.index, 'mapped.', {
                         title: getStreamTitle(stream),
                         language: normalizedLanguage,
                         codec: stream.codec_long_name
@@ -1302,7 +1302,7 @@ h265ize.processVideo = function(video) {
                 // Other streams (Attachments: fonts, pictures, etc.)
                 _.each(data.streams.otherStreams, function(stream, i) {
                     command.outputOptions('-map', stream.input + ':' + stream.index);
-                    logger.debug('Other stream', stream.input+':'+stream.index, 'mapped.');
+                    logger.debug('Other stream', stream.input + ':' + stream.index, 'mapped.');
                 });
 
                 resolve(data);
@@ -1548,6 +1548,29 @@ h265ize.processVideo = function(video) {
             });
         };
 
+        let moveToOutput = function(data) {
+            return new Promise(function(resolve, reject) {
+
+                if (args.delete)
+                    fs.removeSync(video);
+                if (args.preview)
+                    fs.removeSync(fileOutput);
+                logger.verbose('Moving file to final destination. Wait for transfer confirmation message!');
+                logger.debug('Output path:', fileOutput);
+                fs.move(tempOutput, fileOutput, function(err) {
+                    if (err)
+                        throw err;
+
+                    logger.verbose(pathData.name + '.' + args.outputFormat, 'transfered successfully.');
+                    while (temp.files.indexOf(tempOutput) > -1)
+                        temp.files.splice(temp.files.indexOf(tempOutput), 1);
+
+                    h265ize.statusUpdate(video, 'finished');
+                    resolve(data);
+                });
+            });
+        };
+
 
         let takeScreenshots = function(data) {
             return new Promise(function(resolve, reject) {
@@ -1557,7 +1580,7 @@ h265ize.processVideo = function(video) {
 
                 logger.verbose('Taking screenshots...');
 
-                let command = new ffmpeg(tempOutput);
+                let command = new ffmpeg(fileOutput);
                 let commandIndex = temp.commandQueue.push(command);
 
                 command
@@ -1633,28 +1656,12 @@ h265ize.processVideo = function(video) {
         // Check if video needs multiple passes
         .then(multiPass)
             .then(verifyEncode)
+            .then(moveToOutput)
             .then(takeScreenshots)
             .then(function(data) {
                 logger.info('Processing', colors.bold(colors.yellow(pathData.name + '.' + args.outputFormat)), 'complete.');
                 logger.info('Original:', colors.yellow(filesize(data.original.format.size)), '\t', 'New:', colors.yellow(filesize(data.new.format.size)), '\t', 'Percentage:', colors.yellow(data.ratio + '%'));
-
-                if (args.delete)
-                    fs.removeSync(video);
-                if (args.preview)
-                    fs.removeSync(fileOutput);
-                logger.verbose('Moving file to final destination. Wait for transfer confirmation message!');
-                logger.debug('Output path:', fileOutput);
-                fs.move(tempOutput, fileOutput, function(err) {
-                    if (err)
-                        throw err;
-
-                    logger.verbose(pathData.name + '.' + args.outputFormat, 'transfered successfully.');
-                    while (temp.files.indexOf(tempOutput) > -1)
-                        temp.files.splice(temp.files.indexOf(tempOutput), 1);
-
-                    h265ize.statusUpdate(video, 'finished');
-                    resolve();
-                });
+                resolve();
             })
             .catch(function(err) {
 
@@ -1828,7 +1835,7 @@ function extractTrack(videoPath, trackIndex) {
         }
 
         let base = path.basename(videoPath);
-        let output = path.join(args.tempDirectory, 'TRACK'+trackIndex+'_'+base.replace(/\.[^/.]+$/, ""));
+        let output = path.join(args.tempDirectory, 'TRACK' + trackIndex + '_' + base.replace(/\.[^/.]+$/, ""));
 
         logger.debug('Extracting track', trackIndex, 'from', base, '. Please wait...');
         let process = spawn('mkvextract', ['tracks', videoPath, trackIndex + ':' + output])
@@ -1842,18 +1849,20 @@ function extractTrack(videoPath, trackIndex) {
                 }
                 resolve(output);
             });
-            process.stdout.on('data', function(data) {
-                outputHandler('mkvextract', data)
-            });
-            process.stderr.on('data', function(data) {
-                outputHandler('mkvextract', data)
-            });
+        process.stdout.on('data', function(data) {
+            outputHandler('mkvextract', data);
+        });
+        process.stderr.on('data', function(data) {
+            outputHandler('mkvextract', data);
+        });
 
     });
 }
 
 function outputHandler(tool, data) {
-    logger.debug(colors.bgMagenta.white('['+tool+']'), data.toString('utf8'), {__clearLine: true});
+    logger.debug(colors.bgMagenta.white('[' + tool + ']'), data.toString('utf8'), {
+        __clearLine: true
+    });
 }
 
 
@@ -1885,13 +1894,13 @@ function vobsubToSRT(filePath) {
                     });
                 }
                 resolve(filePathWithoutExtension + '.srt');
-            })
-            process.stdout.on('data', function(data) {
-                outputHandler('vobsub2srt', data)
             });
-            process.stderr.on('data', function(data) {
-                outputHandler('vobsub2srt', data)
-            });
+        process.stdout.on('data', function(data) {
+            outputHandler('vobsub2srt', data);
+        });
+        process.stderr.on('data', function(data) {
+            outputHandler('vobsub2srt', data);
+        });
     });
 }
 
