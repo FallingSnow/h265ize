@@ -1616,14 +1616,14 @@ h265ize.processVideo = function(video) {
 
                 logger.verbose('Creating sample...');
 
-                let command = new ffmpeg(tempOutput);
+                let command = new ffmpeg(fileOutput);
                 let commandIndex = temp.commandQueue.push(command);
 
                 command.seekInput(data.metadata.format.duration / 2).duration(args.previewLength / 1000).outputOptions('-c', 'copy');
 
                 command
                     .on('start', function(commandLine) {
-                        temp.files.push(tempOutput);
+                        temp.files.push(fileOutput);
                         logger.debug('Running Query:', commandLine);
                     })
                     .on('end', function() {
