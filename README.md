@@ -22,11 +22,13 @@ If you have any questions or h265ize isn't working for you, feel free to open an
 - Detects if file is already encoded in x265 and skips it
 - Ability to make encoding previews
 - Take screenshots of a finished encode
+- Fallback ffmpeg/ffprobe binary if ffmpeg is not installed
 - Faulty encoding detection based on before and after video durations
 - Maintains file structure in output folder (So in theory you could just take your 3tb movie folder and throw it into the script and the output folder should look that same but with x265 videos)
 
 ### Dependencies
 - [Node.js](https://nodejs.org/en/) - Required in order to run h265ize.
+- [ffmpeg](https://ffmpeg.org/) - Does the video conversion among other things.
 
 #### Option Dependencies
 - [mkvtoolnix](https://www.bunkus.org/videotools/mkvtoolnix/) - Used for upconverting subs in MKVs.
@@ -37,7 +39,7 @@ To install h265ize run one of the following command lines to download and instal
 
 ##### Base Utility
 ```
-npm install h265ize
+npm install h265ize --global
 ```
 
 ##### Arch Linux (Plus Dependencies)

@@ -7,6 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "bin": "h265ize",
+  "directories": {
+    "lib": "lib"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/FallingSnow/h265ize.git"
