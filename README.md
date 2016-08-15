@@ -6,6 +6,8 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 
 If you have any questions or h265ize isn't working for you, feel free to open an issue.
 
+> *h265ize will support [AV1](https://en.wikipedia.org/wiki/AOMedia_Video_1) once encoder support becomes stable & plex supports decoding it.*
+
 ## Features
 - Works on Windows, OSX, and Linux
 - Batch file processing (can process a whole folder)
