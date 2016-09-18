@@ -6,6 +6,8 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 
 If you have any questions or h265ize isn't working for you, feel free to open an issue.
 
+> *h265ize will support [AV1](https://en.wikipedia.org/wiki/AOMedia_Video_1) once encoder support becomes stable & plex supports decoding it.*
+
 ## Features
 - Works on Windows, OSX, and Linux
 - Batch file processing (can process a whole folder)
@@ -129,8 +131,8 @@ Run `h265ize --help` for more info.
 | testing-ssim | x265's native preset just in SSIM mode. |
 
 #### Examples
-* `./h265izer -v big_buck_bunny_1080p_h264.mov`
-* `./h265izer -v -d /home -q 25 -g /home big_buck_bunny_folder`
+* `h265izer -v big_buck_bunny_1080p_h264.mov`
+* `h265izer -v -d /home -q 25 -g /home big_buck_bunny_folder`
 
 ## Stats file
 The stats file is located at the current working directory under the name `h265ize.csv`. This must be enabled using the `--stats` flag. The file is composed of several lines. Each line is in the format
