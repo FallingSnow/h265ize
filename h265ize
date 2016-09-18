@@ -25,8 +25,8 @@ const hasbin = require('hasbin');
 //const stackTrace = require('stack-trace');
 //require("long-stack-traces");
 
-const ffmpegPath = require('ffmpeg-static').path;
-const ffprobePath = require('ffprobe-static').path;
+// const ffmpegPath = require('ffmpeg-static').path;
+// const ffprobePath = require('ffprobe-static').path;
 const ffmpeg = require('fluent-ffmpeg');
 
 const helpers = require(Path.join(__dirname, 'lib/helpers.js'));
@@ -1158,16 +1158,16 @@ class Encoder {
 
         this.events = new EventEmitter();
 
-        if (!hasbin.sync('ffmpeg')) {
-            this.usingFallbackFfmpeg = true;
-            logger.alert('ffmpeg not found. Using fallback binary.');
-            ffmpeg.setFfmpegPath(ffmpegPath);
-        }
-        if (!hasbin.sync('ffprobe')) {
-            this.usingFallbackFfprobe = true;
-            logger.alert('ffprobe not found. Using fallback binary.');
-            ffmpeg.setFfprobePath(ffprobePath);
-        }
+        // if (!hasbin.sync('ffmpeg')) {
+        //     this.usingFallbackFfmpeg = true;
+        //     logger.alert('ffmpeg not found. Using fallback binary.');
+        //     ffmpeg.setFfmpegPath(ffmpegPath);
+        // }
+        // if (!hasbin.sync('ffprobe')) {
+        //     this.usingFallbackFfprobe = true;
+        //     logger.alert('ffprobe not found. Using fallback binary.');
+        //     ffmpeg.setFfprobePath(ffprobePath);
+        // }
     }
 
     start() {
