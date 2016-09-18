@@ -1,10 +1,10 @@
 {
   "name": "h265ize",
-  "version": "0.4.3r1",
+  "version": "0.5.0",
   "description": "h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.",
   "main": "h265ize",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "./node_modules/.bin/mocha --reporter spec test.js"
   },
   "bin": "h265ize",
   "directories": {
@@ -38,14 +38,21 @@
     "hasbin": "^1.2.3",
     "keypress": "^0.2.1",
     "lodash": "^4.12.0",
+    "long-stack-traces": "^0.1.2",
     "mathjs": "^3.2.1",
     "mime": "^1.3.4",
     "moment": "^2.13.0",
     "moment-duration-format": "^1.3.0",
     "optional": "^0.1.3",
+    "promise-pauser": "^1.0.0",
     "recursive-readdir": "^2.0.0",
+    "stack-trace": "0.0.9",
     "strip-ansi": "^3.0.1",
     "winston": "^2.2.0",
     "yargs": "^4.7.1"
+  },
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "mocha": "^3.0.2"
   }
 }
