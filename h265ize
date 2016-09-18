@@ -246,6 +246,9 @@ class Video {
     setASPreset() {
         let _self = this;
         return new Promise(function(resolve, reject) {
+            if (!_self.options.asPreset)
+                return resolve();
+                
             switch (_self.options.asPreset) {
                 case 'anime':
                     _self.options.quality = 19;
@@ -836,7 +839,7 @@ class Video {
         let _self = this;
         return new Promise(function(resolve, reject) {
 
-            if (_self.options.multiPass <= 1)
+            if (!_self.options.multiPass || _self.options.multiPass <= 1)
                 return resolve();
 
             if (!_self.options.videoBitrate)
