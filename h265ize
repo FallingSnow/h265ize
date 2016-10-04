@@ -53,7 +53,18 @@ Promise.config({
 
 class Video {
     constructor(path, options) {
+        this.encoder = null;
+
+        // Path related data
         this.path = path;
+        let pathParsed = Path.parse(this.path);
+        this.base = pathParsed.base;
+        this.dir = pathParsed.dir;
+        this.ext = pathParsed.ext;
+        this.name = pathParsed.name;
+        this.root = pathParsed.root;
+
+        // Setup encoding options
         this.options = {};
         _.defaults(this.options, options, {
             preview: false,
@@ -62,23 +73,13 @@ class Video {
             stats: true,
             destination: os.homedir()
         });
-        this.encoder = null;
-
-        let pathParsed = Path.parse(this.path);
-        this.base = pathParsed.base;
-        this.dir = pathParsed.dir;
-        this.ext = pathParsed.ext;
-        this.name = pathParsed.name;
-        this.root = pathParsed.root;
-
         if (!this.options.delete) {
             this.output = {
                 base: this.name + (this.options.preview ? '-preview' : '') + '.' + this.options.outputFormat,
                 dir: this.options.destination
             };
             this.output.path = Path.join(this.output.dir, this.output.base);
-        }
-        else {
+        } else {
             this.output = {
                 base: this.name + (this.options.preview ? '-preview' : '') + '.' + this.options.outputFormat,
                 dir: this.dir,
@@ -88,10 +89,11 @@ class Video {
 
         this.running = false;
         this.paused = false;
+        this.status;
 
         this.ffmpegCommand = new ffmpeg().input(this.path).renice(10)
-            .videoCodec('libx265').audioCodec('copy').outputOptions('-c:s', 'copy')
-            .outputOptions('-c:d', 'copy');
+                .videoCodec('libx265').audioCodec('copy').outputOptions('-c:s', 'copy')
+                .outputOptions('-c:d', 'copy');
         this.promiseChain;
         this.pauser = Pauser.pauser();
         this.inputCounter = 0;
@@ -109,62 +111,62 @@ class Video {
             action: 'pending'
         };
         this.stages = [{
-            name: 'Get Initial Metadata',
-            action: 'getting intial metadata',
-            promise: this.getInitialMetadata
-        }, {
-            name: 'Process Streams',
-            action: 'processing streams',
-            promise: this.processStreams
-        }, {
-            name: 'Set AS Preset',
-            action: 'setting as preset',
-            promise: this.setASPreset
-        }, {
-            name: 'Upconvert',
-            action: 'upconverting',
-            promise: this.upconvert
-        }, {
-            name: 'Set Video Bit Depth',
-            action: 'detecting video bit depth',
-            promise: this.setVideoBitDepth
-        }, {
-            name: 'Normalize Audio',
-            action: 'normalizing audio',
-            promise: this.normalizeAudio
-        }, {
-            name: 'Auto Crop',
-            action: 'detecting crop',
-            promise: this.autoCrop
-        }, {
-            name: 'Map Streams',
-            action: 'mapping streams',
-            promise: this.mapStreams
-        }, {
-            name: 'Map High Efficiency Audio',
-            action: 'mapping high effeciency audio',
-            promise: this.heAudio
-        }, {
-            name: 'Encode',
-            action: 'encoding',
-            promise: this.encode
-        }, {
-            name: 'Multipass',
-            action: 'generating multipass',
-            promise: this.multiPass
-        }, {
-            name: 'Verify Encode',
-            action: 'verifying encode',
-            promise: this.verifyEncode
-        }, {
-            name: 'Screenshots',
-            action: 'creating screenshots',
-            promise: this.screenshots
-        }, {
-            name: 'Stats',
-            action: 'appending stats',
-            promise: this.appendStats
-        }];
+                name: 'Get Initial Metadata',
+                action: 'getting intial metadata',
+                promise: this.getInitialMetadata
+            }, {
+                name: 'Process Streams',
+                action: 'processing streams',
+                promise: this.processStreams
+            }, {
+                name: 'Set AS Preset',
+                action: 'setting as preset',
+                promise: this.setASPreset
+            }, {
+                name: 'Upconvert',
+                action: 'upconverting',
+                promise: this.upconvert
+            }, {
+                name: 'Set Video Bit Depth',
+                action: 'detecting video bit depth',
+                promise: this.setVideoBitDepth
+            }, {
+                name: 'Normalize Audio',
+                action: 'normalizing audio',
+                promise: this.normalizeAudio
+            }, {
+                name: 'Auto Crop',
+                action: 'detecting crop',
+                promise: this.autoCrop
+            }, {
+                name: 'Map Streams',
+                action: 'mapping streams',
+                promise: this.mapStreams
+            }, {
+                name: 'Map High Efficiency Audio',
+                action: 'mapping high effeciency audio',
+                promise: this.heAudio
+            }, {
+                name: 'Encode',
+                action: 'encoding',
+                promise: this.encode
+            }, {
+                name: 'Multipass',
+                action: 'generating multipass',
+                promise: this.multiPass
+            }, {
+                name: 'Verify Encode',
+                action: 'verifying encode',
+                promise: this.verifyEncode
+            }, {
+                name: 'Screenshots',
+                action: 'creating screenshots',
+                promise: this.screenshots
+            }, {
+                name: 'Stats',
+                action: 'appending stats',
+                promise: this.appendStats
+            }];
     }
 
     _addX265Option(option) {
@@ -173,8 +175,8 @@ class Video {
 
     getInitialMetadata() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
-            Video.getMetadata(_self).then(function(metadata) {
+        return new Promise(function (resolve, reject) {
+            Video.getMetadata(_self).then(function (metadata) {
                 _self.metadata = metadata;
                 resolve();
             }, reject);
@@ -184,15 +186,15 @@ class Video {
 
     processStreams() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
 
             let videoStreams = [],
-                audioStreams = [],
-                subtitleStreams = [],
-                otherStreams = [];
+                    audioStreams = [],
+                    subtitleStreams = [],
+                    otherStreams = [];
 
             // Dissect each video stream
-            _.each(_self.metadata.streams, function(stream) {
+            _.each(_self.metadata.streams, function (stream) {
                 _self.encoder.logger.debug('Working on stream:', stream.index);
                 stream.input = 0;
 
@@ -245,10 +247,10 @@ class Video {
 
     setASPreset() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
             if (!_self.options.asPreset)
                 return resolve();
-                
+
             switch (_self.options.asPreset) {
                 case 'anime':
                     _self.options.quality = 19;
@@ -272,7 +274,7 @@ class Video {
 
     upconvert() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
             if (_self.options.upconvert || _self.options.test)
                 return resolve();
 
@@ -280,17 +282,17 @@ class Video {
             let trackUpconvertProcesses = [];
 
             // Here you can process all subtitles
-            _.each(_self.streams.subtitleStreams, function(subtitle, i) {
+            _.each(_self.streams.subtitleStreams, function (subtitle, i) {
 
                 // Detect dvdsub subtitles
                 if (subtitle.codec_name === 'dvdsub' || subtitle.codec_name === 'dvd_subtitle') {
 
                     // Convert dvdsub subtitle to srt
-                    trackUpconvertProcesses.push(new Promise(function(resolve, reject) {
-                        helpers.extractTrack(_self.path, subtitle.index).then(helpers.vobsubToSRT).then(function(filePath) {
+                    trackUpconvertProcesses.push(new Promise(function (resolve, reject) {
+                        helpers.extractTrack(_self.path, subtitle.index).then(helpers.vobsubToSRT).then(function (filePath) {
                             _self.ffmpegCommand.input(filePath);
                             _self.temp.files.push(filePath);
-                            Video.getMetadata(_self).then(function(metadata) {
+                            Video.getMetadata(_self).then(function (metadata) {
                                 metadata.streams[0].title = subtitle.title;
                                 metadata.streams[0].language = subtitle.language;
                                 metadata.streams[0].tags = subtitle.tags;
@@ -307,7 +309,7 @@ class Video {
 
             _self.encoder.logger.debug('Upconverting', trackUpconvertProcesses.length, 'tracks.');
             // Execute all upconvert processes
-            Promise.all(trackUpconvertProcesses).then(function() {
+            Promise.all(trackUpconvertProcesses).then(function () {
                 resolve();
             }).catch(reject);
 
@@ -317,11 +319,11 @@ class Video {
 
     setVideoBitDepth() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
 
             // Video streams
             let videoIndex = 0,
-                videoBitDepth = 8;
+                    videoBitDepth = 8;
 
             if (_self.streams.videoStreams.length > 1) {
                 // TODO implement feature
@@ -333,8 +335,7 @@ class Video {
             // Check for 12bit or 10bit video
             if (videoStream.pix_fmt.indexOf('12le') > -1 || videoStream.pix_fmt.indexOf('12be') > -1) {
                 videoBitDepth = 12;
-            }
-            else if (videoStream.pix_fmt.indexOf('10le') > -1 || videoStream.pix_fmt.indexOf('10be') > -1) {
+            } else if (videoStream.pix_fmt.indexOf('10le') > -1 || videoStream.pix_fmt.indexOf('10be') > -1) {
                 videoBitDepth = 10;
             }
             _self.videoBitDepth = videoBitDepth;
@@ -342,11 +343,9 @@ class Video {
             // Set video encoding profile
             if (_self.options.bitdepth === 12) {
                 _self.ffmpegCommand.outputOptions('-pix_fmt', 'yuv420p12le');
-            }
-            else if (_self.options.bitdepth === 10) {
+            } else if (_self.options.bitdepth === 10) {
                 _self.ffmpegCommand.outputOptions('-pix_fmt', 'yuv420p10le');
-            }
-            else {
+            } else {
                 switch (_self.videoBitDepth) {
                     case 16:
                         _self.ffmpegCommand.outputOptions('-pix_fmt', 'yuv420p16le');
@@ -386,34 +385,34 @@ class Video {
 
     normalizeAudio() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
 
             if (!_self.options.normalizeLevel || _self.options.normalizeLevel < 3) {
                 return resolve();
             }
 
             _self.stages[_self.currentStageNum].command = new ffmpeg(_self.path, {
-                    logger: _self.encoder.logger
-                }).inputOptions('-hide_banner').format('null').output('-')
-                .on('start', function(commandLine) {
-                    if (_self.paused)
-                        _self.pause();
-                    _self.encoder.logger.debug('Running Query:', commandLine);
-                })
-                .on('error', function(err, stdout, stderr) {
-                    _self.encoder.logger.debug(err.stack);
+                logger: _self.encoder.logger
+            }).inputOptions('-hide_banner').format('null').output('-')
+                    .on('start', function (commandLine) {
+                        if (_self.paused)
+                            _self.pause();
+                        _self.encoder.logger.debug('Running Query:', commandLine);
+                    })
+                    .on('error', function (err, stdout, stderr) {
+                        _self.encoder.logger.debug(err.stack);
 
-                    _self.encoder.logger.debug(stderr);
+                        _self.encoder.logger.debug(stderr);
 
-                    if (err.message.startsWith('ffmpeg was killed with signal'))
-                        reject(new Error('ENDING'));
-                    else
-                        reject(err);
-                });
+                        if (err.message.startsWith('ffmpeg was killed with signal'))
+                            reject(new Error('ENDING'));
+                        else
+                            reject(err);
+                    });
             let vdc = _self.stages[_self.currentStageNum].command;
 
             // Only map streams we are going to work on
-            _.each(_self.streams.audioStreams, function(stream, i) {
+            _.each(_self.streams.audioStreams, function (stream, i) {
                 vdc.outputOptions('-map', stream.input + ':' + stream.index);
             });
 
@@ -434,11 +433,11 @@ class Video {
                 // TODO: Finish
 
                 // Oh loudnorm multipass, lets begin
-                _.each(_self.streams.audioStreams, function(stream, i) {
+                _.each(_self.streams.audioStreams, function (stream, i) {
                     vdc.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json');
                 });
 
-                vdc.on('end', function(stderr) {
+                vdc.on('end', function (stderr) {
                     delete _self.stages[_self.currentStageNum].command;
                     _self.encoder.logger.debug(stderr);
                     process.exit(0);
@@ -452,11 +451,11 @@ class Video {
             else if (_self.options.normalizeLevel >= 3) {
                 const volumeRegexp = /max_volume: (-?[0-9]+\.[0-9]+)/g;
                 let volumeLevels = [];
-                _.each(_self.streams.audioStreams, function(stream, i) {
+                _.each(_self.streams.audioStreams, function (stream, i) {
                     vdc.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']volumedetect');
                 });
 
-                vdc.on('stderr', function(stderrLine) {
+                vdc.on('stderr', function (stderrLine) {
                     if (stderrLine.startsWith('[Parsed_volumedetect')) {
                         let match = volumeRegexp.exec(stderrLine);
                         if (match) {
@@ -464,9 +463,9 @@ class Video {
                         }
                     }
                     _self.encoder.logger.debug(colors.bgMagenta.white('[ffmpeg]'), stderrLine);
-                }).on('end', function(stderr) {
+                }).on('end', function (stderr) {
                     delete _self.stages[_self.currentStageNum].command;
-                    _.each(_self.streams.audioStreams, function(stream, i) {
+                    _.each(_self.streams.audioStreams, function (stream, i) {
                         let volume = volumeLevels[i] * -1 - 2.0;
                         _self.ffmpegCommand.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']volume=' + volume + 'dB');
                         _self.ffmpegCommand.outputOptions('-c:' + stream.input + ':' + stream.index, 'libfdk_aac');
@@ -485,7 +484,7 @@ class Video {
 
     autoCrop() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
             if (_self.options.normalizeLevel < 1) {
                 return resolve();
             }
@@ -494,54 +493,53 @@ class Video {
             const interval = _self.metadata.format.duration / (intervals + 1);
 
             function detectCrop(start, fallback) {
-                return new Promise(function(resolve, reject) {
+                return new Promise(function (resolve, reject) {
                     const cropRegexp = /crop=(-?[0-9]+):(-?[0-9]+):(-?[0-9]+):(-?[0-9]+)/g;
                     _self.stages[_self.currentStageNum].command = new ffmpeg(_self.path, {
-                            logger: _self.encoder.logger
-                        }).outputOptions('-map', _self.videoStream.input + ':' + _self.videoStream.index)
-                        .videoFilters("cropdetect=0.094:16:0").format('null').output('-');
+                        logger: _self.encoder.logger
+                    }).outputOptions('-map', _self.videoStream.input + ':' + _self.videoStream.index)
+                            .videoFilters("cropdetect=0.094:16:0").format('null').output('-');
 
                     if (fallback) {
                         _self.encoder.logger.warn('Crop detection failed! Running crop detection in fallback mode. This is significantly slower.');
-                    }
-                    else {
+                    } else {
                         _self.stages[_self.currentStageNum].command.frames(2).seekInput(start);
                     }
 
                     let crop = {};
 
                     _self.stages[_self.currentStageNum].command
-                        .on('start', function(commandLine) {
-                            if (_self.paused)
-                                _self.pause();
+                            .on('start', function (commandLine) {
+                                if (_self.paused)
+                                    _self.pause();
 
-                            _self.encoder.logger.debug('Running Query:', commandLine);
-                        })
-                        .on('end', function(stdout, stderr) {
-                            delete _self.stages[_self.currentStageNum].command;
+                                _self.encoder.logger.debug('Running Query:', commandLine);
+                            })
+                            .on('end', function (stdout, stderr) {
+                                delete _self.stages[_self.currentStageNum].command;
 
-                            let match = cropRegexp.exec(stderr);
-                            if (match === null) {
-                                return reject(new Error('Could not run crop detection.'));
-                            }
+                                let match = cropRegexp.exec(stderr);
+                                if (match === null) {
+                                    return reject(new Error('Could not run crop detection.'));
+                                }
 
-                            crop.w = parseInt(match[1], 10);
-                            crop.h = parseInt(match[2], 10);
-                            crop.x = parseInt(match[3], 10);
-                            crop.y = parseInt(match[4], 10);
-                            resolve(crop);
-                        })
-                        // .on('stderr', function(line) {
-                        //     this.encoder.logger.debug(line);
-                        // })
-                        .on('error', function(err, stdout, stderr) {
-                            _self.encoder.logger.debug(err.stack);
+                                crop.w = parseInt(match[1], 10);
+                                crop.h = parseInt(match[2], 10);
+                                crop.x = parseInt(match[3], 10);
+                                crop.y = parseInt(match[4], 10);
+                                resolve(crop);
+                            })
+                            // .on('stderr', function(line) {
+                            //     this.encoder.logger.debug(line);
+                            // })
+                            .on('error', function (err, stdout, stderr) {
+                                _self.encoder.logger.debug(err.stack);
 
-                            if (err.message.startsWith('ffmpeg was killed with signal'))
-                                return reject(new Error('ENDING'));
-                            else
-                                return reject(err);
-                        });
+                                if (err.message.startsWith('ffmpeg was killed with signal'))
+                                    return reject(new Error('ENDING'));
+                                else
+                                    return reject(err);
+                            });
 
                     _self.stages[_self.currentStageNum].command.run();
                 });
@@ -549,8 +547,8 @@ class Video {
 
             //
             let i = intervals,
-                counter = 1,
-                cropDetections = [];
+                    counter = 1,
+                    cropDetections = [];
 
             // This just runs all the ffmpeg crop detections in sync so you
             // dont end up with a million threads running
@@ -562,14 +560,13 @@ class Video {
                         __clearLine: true
                     });
                     let startTime = interval * i--;
-                    detectCrop(startTime).then(syncHandler, function() {
-                        return detectCrop(startTime, true).then(function(crop) {
+                    detectCrop(startTime).then(syncHandler, function () {
+                        return detectCrop(startTime, true).then(function (crop) {
                             cropDetections.push(crop);
                             cropDetectionComplete(cropDetections);
                         }, reject);
                     });
-                }
-                else
+                } else
                     cropDetectionComplete(cropDetections);
             }
             syncHandler();
@@ -582,10 +579,10 @@ class Video {
             //   { w: '1920', h: '1072', x: '0', y: '4' } ]
             function cropDetectionComplete(detections) {
                 let width = Number.NEGATIVE_INFINITY,
-                    height = Number.NEGATIVE_INFINITY,
-                    x = Number.POSITIVE_INFINITY,
-                    y = Number.POSITIVE_INFINITY;
-                _.each(detections, function(val, key) {
+                        height = Number.NEGATIVE_INFINITY,
+                        x = Number.POSITIVE_INFINITY,
+                        y = Number.POSITIVE_INFINITY;
+                _.each(detections, function (val, key) {
 
                     if (val.w > width)
                         width = val.w;
@@ -608,7 +605,7 @@ class Video {
 
     mapStreams() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
 
             _self.ffmpegCommand.outputOptions('-map', _self.videoStream.input + ':' + _self.videoStream.index);
             _self.encoder.logger.debug('Video stream', _self.videoStream.input + ':' + _self.videoStream.index, 'mapped.', {
@@ -619,7 +616,7 @@ class Video {
             });
 
             // Handle native language detection and default audio track selection
-            _.each(_self.streams.audioStreams, function(stream, i) {
+            _.each(_self.streams.audioStreams, function (stream, i) {
                 let normalizedLanguage = helpers.normalizeStreamLanguage(stream);
                 if (normalizedLanguage === helpers.normalizeLanguage(_self.options['native-language']) && !_self.defaultAudioIndex) {
                     _self.defaultAudioIndex = stream.index;
@@ -627,7 +624,7 @@ class Video {
             });
 
             // Audio streams
-            _.each(_self.streams.audioStreams, function(stream, i) {
+            _.each(_self.streams.audioStreams, function (stream, i) {
 
                 let audioTitle = helpers.getStreamTitle(stream);
                 let normalizedLanguage = helpers.normalizeStreamLanguage(stream);
@@ -662,7 +659,7 @@ class Video {
             });
 
             // Subtitle streams
-            _.each(_self.streams.subtitleStreams, function(stream, i) {
+            _.each(_self.streams.subtitleStreams, function (stream, i) {
 
                 // Handle native language
                 let normalizedLanguage = helpers.normalizeStreamLanguage(stream);
@@ -684,7 +681,7 @@ class Video {
             });
 
             // Other streams (Attachments: fonts, pictures, etc.)
-            _.each(_self.streams.otherStreams, function(stream, i) {
+            _.each(_self.streams.otherStreams, function (stream, i) {
                 _self.ffmpegCommand.outputOptions('-map', stream.input + ':' + stream.index);
                 _self.encoder.logger.debug('Other stream', stream.input + ':' + stream.index, 'mapped.');
             });
@@ -695,11 +692,11 @@ class Video {
 
     heAudio() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
             if (!_self.options.heAudio)
                 return resolve();
 
-            _.each(_self.streams.audioStreams, function(stream, i) {
+            _.each(_self.streams.audioStreams, function (stream, i) {
                 if (stream.codec_name !== 'flac' || _self.options.forceHeAudio) {
                     _self.encoder.logger.verbose('Audio stream', colors.yellow(helpers.getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'will be encoded to HE Audio.');
                     let bitrate = _self.options.HEAudioBitrate * stream.channels;
@@ -722,8 +719,7 @@ class Video {
                         _self.encoder.logger.alert('Audio does not have a title. Title set to', '"' + newTitle + '".');
                         _self.ffmpegCommand.outputOptions('-metadata:s:a:' + stream.index, 'title="' + newTitle + '"');
                     }
-                }
-                else {
+                } else {
                     _self.encoder.logger.alert('Audio stream', colors.yellow(helpers.getStreamTitle(stream) + ' (index: ' + stream.index + ')'), 'won\'t be encoded with HE Audio because it is already in FLAC (lossless) format.');
                 }
             });
@@ -734,7 +730,7 @@ class Video {
 
     encode() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
             _self.pass++;
             let startTime = moment();
 
@@ -743,7 +739,7 @@ class Video {
 
             // Make output directory
             if (!_self.options.delete)
-                fs.ensureDir(_self.output.dir, function(err) {
+                fs.ensureDir(_self.output.dir, function (err) {
                     if (err) {
                         _self.encoder.logger.warn(_self.base, 'was unable to be encoded. The following error was given:');
                         _self.encoder.logger.warn(err);
@@ -759,8 +755,7 @@ class Video {
             // Video bitrate target or constant quality?
             if (_self.options.videoBitrate) {
                 _self.ffmpegCommand.videoBitrate(_self.options.videoBitrate);
-            }
-            else {
+            } else {
                 _self.ffmpegCommand.outputOptions('-crf ' + _self.options.quality);
             }
 
@@ -775,61 +770,61 @@ class Video {
             _self.ffmpegCommand.outputOptions('-x265-params', _self.x265Options);
 
             _self.ffmpegCommand
-                .on('progress', function(progress) {
-                    let elapsed = moment.duration(moment().diff(startTime), 'milliseconds');
-                    let processed = helpers.momentizeTimemark(progress.timemark);
-                    let precent = progress.percent ? progress.percent.toFixed(1) : ((processed.asMilliseconds() / 1000 / _self.metadata.format.duration) * 100).toFixed(1);
-                    let estimatedFileSize = precent > 10 ? filesize(fs.statSync(_self.output.path).size / precent * 100) : '';
-                    _self.elapsedFormated = elapsed.format('hh:mm:ss', {
-                        trim: false,
-                        forceLength: true
-                    });
+                    .on('progress', function (progress) {
+                        let elapsed = moment.duration(moment().diff(startTime), 'milliseconds');
+                        let processed = helpers.momentizeTimemark(progress.timemark);
+                        let precent = progress.percent ? progress.percent.toFixed(1) : ((processed.asMilliseconds() / 1000 / _self.metadata.format.duration) * 100).toFixed(1);
+                        let estimatedFileSize = precent > 10 ? filesize(fs.statSync(_self.output.path).size / precent * 100) : '';
+                        _self.elapsedFormated = elapsed.format('hh:mm:ss', {
+                            trim: false,
+                            forceLength: true
+                        });
 
-                    // let speed = 'x' + getSpeedRatio(progress.timemark, elapsed);
-                    let speed = (progress.currentFps / frameRate).toFixed(3);
-                    let eta = moment.duration((100 - precent) / 100 * _self.metadata.format.duration * (1 / speed), 'seconds').format('hh:mm:ss', {
-                        trim: false,
-                        forceLength: true
-                    });
+                        // let speed = 'x' + getSpeedRatio(progress.timemark, elapsed);
+                        let speed = (progress.currentFps / frameRate).toFixed(3);
+                        let eta = moment.duration((100 - precent) / 100 * _self.metadata.format.duration * (1 / speed), 'seconds').format('hh:mm:ss', {
+                            trim: false,
+                            forceLength: true
+                        });
 
-                    _self.encoder.logger.info(colors.bgMagenta.white('[ffmpeg]'), 'Processing:', progress.currentFps + 'fps', precent + '%',
-                        '[' + progress.timemark + ']', '|', colors.yellow(_self.elapsedFormated), '[x' + speed + ']', colors.blue(eta), colors.blue(estimatedFileSize), {
+                        _self.encoder.logger.info(colors.bgMagenta.white('[ffmpeg]'), 'Processing:', progress.currentFps + 'fps', precent + '%',
+                                '[' + progress.timemark + ']', '|', colors.yellow(_self.elapsedFormated), '[x' + speed + ']', colors.blue(eta), colors.blue(estimatedFileSize), {
                             __clearLine: true
                         });
 
-                    _self.progress = {
-                        fps: progress.currentFps,
-                        percent: precent,
-                        processed: processed,
-                        elapsed: _self.elapsedFormated,
-                        eta: eta,
-                        speed: speed
-                    };
+                        _self.progress = {
+                            fps: progress.currentFps,
+                            percent: precent,
+                            processed: processed,
+                            elapsed: _self.elapsedFormated,
+                            eta: eta,
+                            speed: speed
+                        };
 
-                    _self.events.emit('progress', _self.progress);
-                })
-                .on('start', function(commandLine) {
-                    if (_self.paused)
-                        _self.pause();
-                    _self.temp.files.push(_self.output.path);
-                    _self.encoder.logger.debug('Running Query:', commandLine);
-                })
-                // .on('stderr', function(stderrLine) {
-                //     _self.encoder.logger.info(colors.bgMagenta.white('[ffmpeg]'), stderrLine);
-                // })
-                .on('end', function() {
-                    _.pull(_self.temp.files, _self.output.path);
-                    resolve();
-                })
-                .on('error', function(err, stdout, stderr) {
-                    // this.encoder.logger.debug(colors.bgMagenta.white('[ffmpeg]'), stderr);
-                    _self.encoder.logger.debug(err.stack);
+                        _self.events.emit('progress', _self.progress);
+                    })
+                    .on('start', function (commandLine) {
+                        if (_self.paused)
+                            _self.pause();
+                        _self.temp.files.push(_self.output.path);
+                        _self.encoder.logger.debug('Running Query:', commandLine);
+                    })
+                    // .on('stderr', function(stderrLine) {
+                    //     _self.encoder.logger.info(colors.bgMagenta.white('[ffmpeg]'), stderrLine);
+                    // })
+                    .on('end', function () {
+                        _.pull(_self.temp.files, _self.output.path);
+                        resolve();
+                    })
+                    .on('error', function (err, stdout, stderr) {
+                        // this.encoder.logger.debug(colors.bgMagenta.white('[ffmpeg]'), stderr);
+                        _self.encoder.logger.debug(err.stack);
 
-                    if (err.message.startsWith('ffmpeg was killed with signal'))
-                        reject(new Error('FFMPEGKILLED'));
-                    else
-                        reject(err);
-                });
+                        if (err.message.startsWith('ffmpeg was killed with signal'))
+                            reject(new Error('FFMPEGKILLED'));
+                        else
+                            reject(err);
+                    });
 
             _self.ffmpegCommand.save(_self.output.path);
         });
@@ -837,7 +832,7 @@ class Video {
 
     multiPass() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
 
             if (!_self.options.multiPass || _self.options.multiPass <= 1)
                 return resolve();
@@ -850,25 +845,24 @@ class Video {
 
             let newInput = _self.output.path + '-pass' + _self.pass;
             _self.ffmpegCommand = new ffmpeg(newInput, {
-                    logger: _self.encoder.logger
-                })
-                //.inputOptions('-loglevel', 48)
-                .outputOptions('-map', 0)
-                .outputOptions('-c', 'copy')
-                .outputOptions('-c:v', 'libx265');
-                
+                logger: _self.encoder.logger
+            })
+                    //.inputOptions('-loglevel', 48)
+                    .outputOptions('-map', 0)
+                    .outputOptions('-c', 'copy')
+                    .outputOptions('-c:v', 'libx265');
+
             let statsLogLocation = Path.resolve(os.tmpdir(), 'x265stats.log');
 
             if (_self.options.multiPass === _self.pass + 1) {
                 _self._addX265Option('pass=2:stats=' + statsLogLocation);
-            }
-            else {
+            } else {
                 _self._addX265Option('pass=3:stats=' + statsLogLocation);
             }
 
             return fs.move(_self.output.path, newInput, {
                 clobber: true
-            }, function(err) {
+            }, function (err) {
                 if (err) {
                     _self.encoder.logger.error(err.message);
                     _self.encoder.logger.debug(err.stack);
@@ -881,9 +875,9 @@ class Video {
                 _self.temp.files.push(newInput);
 
                 _self.encoder.logger.verbose('Running pass', _self.pass + 1 + '.');
-                return _self.setVideoBitDepth().then(function() {
+                return _self.setVideoBitDepth().then(function () {
                     return _self.encode.call(_self);
-                }).then(function() {
+                }).then(function () {
                     return _self.multiPass.call(_self);
                 }).then(resolve, reject);
             });
@@ -892,8 +886,8 @@ class Video {
 
     verifyEncode() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
-            Video.getMetadata(_self, true).then(function(metadata) {
+        return new Promise(function (resolve, reject) {
+            Video.getMetadata(_self, true).then(function (metadata) {
                 const timeDiffLimit = 1000;
                 _self.output.metadata = metadata;
                 _self.ratio = (_self.output.metadata.format.size / _self.metadata.format.size * 100).toFixed(2);
@@ -904,8 +898,7 @@ class Video {
                     _self.encoder.logger.warn('New encode is', moment.duration(timeDiff).format(), 'longer than the original. The max is', timeDiffLimit + '.');
                     fs.unlinkSync(_self.output.path);
                     reject(new Error('Processed encode did not meet max time slippage requirements.'));
-                }
-                else {
+                } else {
                     resolve();
                 }
             });
@@ -914,7 +907,7 @@ class Video {
 
     screenshots() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
             if (!_self.options.screenshots)
                 return resolve();
 
@@ -924,16 +917,16 @@ class Video {
 
     appendStats() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
             if (!_self.options.stats)
                 return resolve();
 
-            helpers.initStatsFile(Path.join(__dirname, 'h265ize.csv')).then(function(stream) {
+            helpers.initStatsFile(Path.join(__dirname, 'h265ize.csv')).then(function (stream) {
                 helpers.appendToStatsFile([moment().format('MMMM Do YYYY H:mm:ss a'), _self.path, filesize(_self.metadata.format.size), filesize(_self.output.metadata.format.size), _self.ratio + '%', _self.elapsedFormated], stream)
-                    .then(function() {
-                        stream.close();
-                        resolve();
-                    });
+                        .then(function () {
+                            stream.close();
+                            resolve();
+                        });
             });
 
         });
@@ -954,7 +947,7 @@ class Video {
         });
         this.encoder.logger.verbose('Encoding started at', colors.yellow(this.startTime.format("ddd, h:mm A")));
 
-        fs.ensureDir(this.output.dir, function(err) {
+        fs.ensureDir(this.output.dir, function (err) {
             if (err) {
                 return err;
             }
@@ -962,7 +955,7 @@ class Video {
         this.running = true;
 
         let _self = this;
-        this.promiseChain = Promise.reduce(this.stages, function(stageNum, stage) {
+        this.promiseChain = Promise.reduce(this.stages, function (stageNum, stage) {
             _self.currentStageNum = _self.currentStageNum + 1;
             _self.currentStage = _self.stages[_self.currentStageNum];
 
@@ -971,14 +964,14 @@ class Video {
 
             return stage.promise.call(_self).tap(Pauser.waitFor(_self.pauser));
 
-        }, this.currentStageNum).then(function() {
-            _self.cleanUp();
-            _self.events.emit('finished');
+        }, this.currentStageNum).then(function () {
+            _self.events.emit('finished', _self);
+            _self.status = 'finished';
+            _self.stop();
 
-        }, function(err) {
-            _self.cleanUp();
+        }, function (err) {
             _self.error = err;
-            _self.events.emit('failed', err);
+            _self.stop();
 
         });
 
@@ -1037,15 +1030,23 @@ class Video {
         this.promiseChain.cancel();
         this.running = false;
         this.paused = false;
-        this.cleanUp();
+
+        if (this.status !== 'finished' && this.status  !== 'failed') {
+            this.status = 'failed';
+            this.events.emit('failed', this, new Error(this.error));
+        }
+
         this.events.emit('stopped');
+        this.cleanUp();
     }
 
     cleanUp() {
         let _self = this;
-        return new Promise(function(resolve, reject) {
-            _.each(_self.temp.files, function(path, i) {
-                fs.unlinkSync(path);
+        return new Promise(function (resolve, reject) {
+            _.each(_self.temp.files, function (path, i) {
+                setTimeout(function () {
+                    fs.unlinkSync(path);
+                }, 1000);
             });
             resolve();
         });
@@ -1062,10 +1063,27 @@ class Video {
         this.root = pathParsed.root;
     }
 
+    _updateDestination(path) {
+        this.options.destination = path;
+        if (!this.options.delete) {
+            this.output = {
+                base: this.name + (this.options.preview ? '-preview' : '') + '.' + this.options.outputFormat,
+                dir: this.options.destination
+            };
+            this.output.path = Path.join(this.output.dir, this.output.base);
+        } else {
+            this.output = {
+                base: this.name + (this.options.preview ? '-preview' : '') + '.' + this.options.outputFormat,
+                dir: this.dir,
+                path: path
+            };
+        }
+    }
+
     static getMetadata(video, ofOutput) {
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
             let path = ofOutput ? video.output.path : video.path;
-            ffmpeg.ffprobe(path, function(err, metadata) {
+            ffmpeg.ffprobe(path, function (err, metadata) {
                 if (err) {
                     // video.encoder.logger.error(err.message);
                     // video.encoder.logger.debug('ffprobe error stack:', err.stack);
@@ -1082,10 +1100,10 @@ class Video {
 
                 if (metadata.format.format_name !== 'srt' && !_.isNumber(metadata.format.duration)) {
                     // video.encoder.logger.alert('Could not retrieve video duration. Computing duration...');
-                    video.stages[video.currentStageNum].command = new ffmpeg().input(video.path).outputFormat('null').output('-').on('start', function() {
+                    video.stages[video.currentStageNum].command = new ffmpeg().input(video.path).outputFormat('null').output('-').on('start', function () {
                         if (video.paused)
                             video.pause();
-                    }).on('end', function(stdout, stderr) {
+                    }).on('end', function (stdout, stderr) {
                         delete video.stages[video.currentStageNum].command;
                         let lines = stderr.split('\n');
                         let lastTime = lines[lines.length - 3];
@@ -1100,8 +1118,7 @@ class Video {
                         metadata.format.duration = seconds.format("s", 6);
                         resolve(metadata);
                     }).run();
-                }
-                else {
+                } else {
                     resolve(metadata);
                 }
             });
@@ -1109,21 +1126,21 @@ class Video {
     }
 
     static takeScreenshots(path, destination, logger) {
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
 
             let command = new ffmpeg(path);
             let outputDir = Path.join(destination);
 
             command
-                .on('filenames', function(filenames) {
-                    if (filenames.length < 6)
-                        logger.alert('Only generating', colors.yellow(filenames.length), 'screenshots.');
-                })
-                .on('end', function() {
-                    resolve();
-                });
+                    .on('filenames', function (filenames) {
+                        if (filenames.length < 6)
+                            logger.alert('Only generating', colors.yellow(filenames.length), 'screenshots.');
+                    })
+                    .on('end', function () {
+                        resolve();
+                    });
 
-            fs.ensureDir(outputDir, function(err) {
+            fs.ensureDir(outputDir, function (err) {
                 if (err) {
                     throw err;
                 }
@@ -1179,13 +1196,11 @@ class Encoder {
             this.running = true;
             if (this.currentlyProcessing) {
                 this.currentlyProcessing.start();
-            }
-            else {
+            } else {
                 this.loop();
             }
             this.events.emit('running');
-        }
-        else {
+        } else {
             this.running = true;
             this.loop();
             this.events.emit('running');
@@ -1244,16 +1259,16 @@ class Encoder {
         this.events.emit('processing', video);
         let _self = this;
         video.events
-            .on('finished', function() {
-                _self.finishedVideos.push(video);
-                _self.loop();
-            })
-            .on('failed', function(reason) {
-                _self.failedVideos.push(video);
-                _self.logger.debug(reason.stack);
-                _self.logger.error(reason.message);
-                _self.loop();
-            });
+                .on('finished', function () {
+                    _self.finishedVideos.push(video);
+                    _self.loop();
+                })
+                .on('failed', function (video, reason) {
+                    _self.failedVideos.push(video);
+                    _self.logger.debug(reason.stack);
+                    _self.logger.error(reason.message);
+                    _self.loop();
+                });
 
         video.start();
     }
@@ -1264,8 +1279,7 @@ class Encoder {
             path.encoder = this;
             this.queue.push(path);
             video = path;
-        }
-        else {
+        } else {
             _.defaults(options, this.options);
             video = new Video(path, options);
             video.encoder = this;
@@ -1280,11 +1294,10 @@ class Encoder {
 
     removeVideo(video) {
         if (video.running) {
-            return video.stop().then(function() {
+            return video.stop().then(function () {
                 this.queue.splice(this.queue.indexOf(video, 1));
             });
-        }
-        else {
+        } else {
             this.queue.splice(this.queue.indexOf(video, 1));
         }
     }
@@ -1312,205 +1325,205 @@ let h265ize = {
 function runCli() {
     let logger = require('./lib/logger.js')('info');
 
-    new Promise(function(resolve, reject) {
+    new Promise(function (resolve, reject) {
         let args = yargs
-            .usage(colors.underline('Usage:') + ' $0 [options] file|directory')
-            .options({
-                'd': {
-                    alias: 'destination',
-                    default: userSettings['destination'] || Path.resolve(process.cwd(), 'h265'),
-                    describe: 'Folder where encoded files are output.',
-                    type: 'string',
-                    normalize: true,
-                    group: 'General:'
-                },
-                // 'g': {
-                //     alias: 'temp-directory',
-                //     default: userSettings['temp-directory'] || Path.resolve(os.tmpdir(), packageSettings.name),
-                //     describe: 'Folder where files are stored during encoding.',
-                //     type: 'string',
-                //     normalize: true,
-                //     group: 'General:'
-                // },
-                // 'log-file': {
-                //     default: userSettings['log-file'] || Path.resolve(process.cwd(), 'h265ize.log'),
-                //     describe: 'Sets the log file location for all output from h265ize. Enable debug mode via the --debug flag to output to the log file.',
-                //     type: 'string',
-                //     normalize: true,
-                //     group: 'General:'
-                // },
-                'm': {
-                    alias: 'preset',
-                    default: userSettings['preset'] || 'fast',
-                    describe: 'x265 encoder preset.',
-                    choices: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'],
-                    type: 'string',
-                    group: 'General:'
-                },
-                'as-preset': {
-                    default: userSettings['as-preset'] || 'none',
-                    describe: 'My personal presets. Descriptions of each preset\'s use and function can be found on the github page.',
-                    choices: ['basic', 'anime', 'testing-ssim', 'none'],
-                    type: 'string',
-                    group: 'Video:'
-                },
-                'n': {
-                    alias: 'native-language',
-                    default: userSettings['native-language'] || '',
-                    describe: 'The native language used to select default audio and subtitles. You may use 3 letter or 2 letter ISO 639-2 Alpha-3/Alpha-2 codes or the full language name. Examples: [eng|en|English|jpn|ja|Japanese]',
-                    type: 'string',
-                    group: 'General:'
-                },
-                'f': {
-                    alias: 'output-format',
-                    default: userSettings['output-format'] || 'mkv',
-                    describe: 'Output container format.',
-                    choices: ['mkv', 'mp4', 'm4v'],
-                    type: 'string',
-                    group: 'General:'
-                },
-                'x': {
-                    alias: 'extra-options',
-                    default: userSettings['extra-options'] || '',
-                    describe: 'Extra x265 options. Options can be found on the x265 options page.',
-                    type: 'string',
-                    group: 'Video:'
-                },
-                'q': {
-                    alias: 'quality',
-                    default: userSettings['quality'] || 19,
-                    describe: 'Sets the qp quality target',
-                    type: 'number',
-                    group: 'General:'
-                },
-                'video-bitrate': {
-                    default: userSettings['video-bitrate'] || 0,
-                    describe: 'Sets the video bitrate, set to 0 to use qp rate control instead of a target bitrate.',
-                    type: 'number',
-                    group: 'Video:'
-                },
-                'l': {
-                    alias: 'preview-length',
-                    default: userSettings['preview-length'] || 30000,
-                    describe: 'Milliseconds to encode in preview mode. Max is half the length of input video.',
-                    type: 'number',
-                    group: 'Advanced:'
-                },
-                // 'time-drift-limit': {
-                //     default: userSettings['time-drift-limit'] || 200,
-                //     describe: 'Milliseconds the finished encode is allowed to differ from the original\'s length.',
-                //     type: 'number',
-                //     group: 'Advanced:'
-                // },
-                'accurate-timestamps': {
-                    default: userSettings['accurate-timestamps'] || false,
-                    describe: 'Become blu-ray complient and reduce the max keyInt to the average frame rate.',
-                    type: 'boolean',
-                    group: 'Video:'
-                },
-                'he-audio': {
-                    default: userSettings['he-audio'] || false,
-                    describe: 'Re-encode audio to opus at 40kbps/channel.',
-                    type: 'boolean',
-                    group: 'Audio:'
-                },
-                'force-he-audio': {
-                    default: userSettings['force-he-audio'] || false,
-                    describe: 'Convert all audio to HE format, including lossless formats.',
-                    type: 'boolean',
-                    group: 'Audio:'
-                },
-                'downmix-he-audio': {
-                    default: userSettings['downmix-he-audio'] || false,
-                    describe: 'Downmix he-audio opus to Dolby Pro Logic II at ? kbps/channel. Enables he-audio.',
-                    type: 'boolean',
-                    group: 'Audio:'
-                },
-                'o': {
-                    alias: 'override',
-                    default: userSettings['override'] || false,
-                    describe: 'Enable override mode. Allows conversion of videos that are already encoded by the hevc codec.',
-                    type: 'boolean',
-                    group: 'General:'
-                },
-                'p': {
-                    alias: 'preview',
-                    default: userSettings['preview'] || false,
-                    describe: 'Only encode a preview of the video starting at middle of video. See -l/--preview-length for more info.',
-                    type: 'boolean',
-                    group: 'General:'
-                },
-                'multi-pass': {
-                    default: userSettings['mutli-pass'] || 0,
-                    describe: 'Enable multiple passes by the encoder. Must be greater 1.',
-                    type: 'number',
-                    group: 'Video:'
-                },
-                'stats': {
-                    default: userSettings['stats'] || false,
-                    describe: 'Output a stats file containing stats for each video converted.',
-                    type: 'boolean',
-                    group: 'Advanced:'
-                },
-                'v': {
-                    alias: 'verbose',
-                    default: userSettings['verbose'] || false,
-                    describe: 'Enables verbose mode. Prints extra information.',
-                    type: 'boolean',
-                    group: 'General:'
-                },
-                'bitdepth': {
-                    default: userSettings['bitdepth'] || false,
-                    describe: 'Forces encoding videos at a specific bitdepth.',
-                    type: 'number',
-                    group: 'Video:'
-                },
-                'screenshots': {
-                    default: userSettings['screenshots'] || false,
-                    describe: 'Take 6 screenshots at regular intervals throughout the finished encode.',
-                    type: 'boolean',
-                    group: 'Video:'
-                },
-                'normalize-level': {
-                    default: userSettings['normalize-level'] || 2,
-                    describe: 'Normalize the output. See README for more info.',
-                    type: 'number',
-                    group: 'Advanced:'
-                },
-                'scale': {
-                    default: userSettings['scale'] || false,
-                    describe: 'Width videos should be scale to. Videos will always maintain original aspect ratio. [Examples: 720, 480]',
-                    type: 'number',
-                    group: 'Video:'
-                },
-                'debug': {
-                    default: userSettings['debug'] || false,
-                    describe: 'Enables debug mode. Prints extra debugging information.',
-                    type: 'boolean',
-                    group: 'Advanced:'
-                },
-                'delete': {
-                    default: userSettings['delete'] || false,
-                    describe: 'Delete source after encoding is complete and replaces it with new encode. [DANGER]',
-                    type: 'boolean',
-                    group: 'Advanced:'
-                },
-                'help': {
-                    describe: 'Displays help page.',
-                    group: 'Options:'
-                },
-                'test': {
-                    default: userSettings['test'] || false,
-                    describe: 'Puts h265ize in test mode. No files will be encoded.',
-                    type: 'boolean',
-                    group: 'Advanced:'
-                },
-                'version': {
-                    describe: 'Displays version information.',
-                    group: 'Options:'
-                },
-            })
-            .argv;
+                .usage(colors.underline('Usage:') + ' $0 [options] file|directory')
+                .options({
+                    'd': {
+                        alias: 'destination',
+                        default: userSettings['destination'] || Path.resolve(process.cwd(), 'h265'),
+                        describe: 'Folder where encoded files are output.',
+                        type: 'string',
+                        normalize: true,
+                        group: 'General:'
+                    },
+                    // 'g': {
+                    //     alias: 'temp-directory',
+                    //     default: userSettings['temp-directory'] || Path.resolve(os.tmpdir(), packageSettings.name),
+                    //     describe: 'Folder where files are stored during encoding.',
+                    //     type: 'string',
+                    //     normalize: true,
+                    //     group: 'General:'
+                    // },
+                    // 'log-file': {
+                    //     default: userSettings['log-file'] || Path.resolve(process.cwd(), 'h265ize.log'),
+                    //     describe: 'Sets the log file location for all output from h265ize. Enable debug mode via the --debug flag to output to the log file.',
+                    //     type: 'string',
+                    //     normalize: true,
+                    //     group: 'General:'
+                    // },
+                    'm': {
+                        alias: 'preset',
+                        default: userSettings['preset'] || 'fast',
+                        describe: 'x265 encoder preset.',
+                        choices: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'],
+                        type: 'string',
+                        group: 'General:'
+                    },
+                    'as-preset': {
+                        default: userSettings['as-preset'] || 'none',
+                        describe: 'My personal presets. Descriptions of each preset\'s use and function can be found on the github page.',
+                        choices: ['basic', 'anime', 'testing-ssim', 'none'],
+                        type: 'string',
+                        group: 'Video:'
+                    },
+                    'n': {
+                        alias: 'native-language',
+                        default: userSettings['native-language'] || '',
+                        describe: 'The native language used to select default audio and subtitles. You may use 3 letter or 2 letter ISO 639-2 Alpha-3/Alpha-2 codes or the full language name. Examples: [eng|en|English|jpn|ja|Japanese]',
+                        type: 'string',
+                        group: 'General:'
+                    },
+                    'f': {
+                        alias: 'output-format',
+                        default: userSettings['output-format'] || 'mkv',
+                        describe: 'Output container format.',
+                        choices: ['mkv', 'mp4', 'm4v'],
+                        type: 'string',
+                        group: 'General:'
+                    },
+                    'x': {
+                        alias: 'extra-options',
+                        default: userSettings['extra-options'] || '',
+                        describe: 'Extra x265 options. Options can be found on the x265 options page.',
+                        type: 'string',
+                        group: 'Video:'
+                    },
+                    'q': {
+                        alias: 'quality',
+                        default: userSettings['quality'] || 19,
+                        describe: 'Sets the qp quality target',
+                        type: 'number',
+                        group: 'General:'
+                    },
+                    'video-bitrate': {
+                        default: userSettings['video-bitrate'] || 0,
+                        describe: 'Sets the video bitrate, set to 0 to use qp rate control instead of a target bitrate.',
+                        type: 'number',
+                        group: 'Video:'
+                    },
+                    'l': {
+                        alias: 'preview-length',
+                        default: userSettings['preview-length'] || 30000,
+                        describe: 'Milliseconds to encode in preview mode. Max is half the length of input video.',
+                        type: 'number',
+                        group: 'Advanced:'
+                    },
+                    // 'time-drift-limit': {
+                    //     default: userSettings['time-drift-limit'] || 200,
+                    //     describe: 'Milliseconds the finished encode is allowed to differ from the original\'s length.',
+                    //     type: 'number',
+                    //     group: 'Advanced:'
+                    // },
+                    'accurate-timestamps': {
+                        default: userSettings['accurate-timestamps'] || false,
+                        describe: 'Become blu-ray complient and reduce the max keyInt to the average frame rate.',
+                        type: 'boolean',
+                        group: 'Video:'
+                    },
+                    'he-audio': {
+                        default: userSettings['he-audio'] || false,
+                        describe: 'Re-encode audio to opus at 40kbps/channel.',
+                        type: 'boolean',
+                        group: 'Audio:'
+                    },
+                    'force-he-audio': {
+                        default: userSettings['force-he-audio'] || false,
+                        describe: 'Convert all audio to HE format, including lossless formats.',
+                        type: 'boolean',
+                        group: 'Audio:'
+                    },
+                    'downmix-he-audio': {
+                        default: userSettings['downmix-he-audio'] || false,
+                        describe: 'Downmix he-audio opus to Dolby Pro Logic II at ? kbps/channel. Enables he-audio.',
+                        type: 'boolean',
+                        group: 'Audio:'
+                    },
+                    'o': {
+                        alias: 'override',
+                        default: userSettings['override'] || false,
+                        describe: 'Enable override mode. Allows conversion of videos that are already encoded by the hevc codec.',
+                        type: 'boolean',
+                        group: 'General:'
+                    },
+                    'p': {
+                        alias: 'preview',
+                        default: userSettings['preview'] || false,
+                        describe: 'Only encode a preview of the video starting at middle of video. See -l/--preview-length for more info.',
+                        type: 'boolean',
+                        group: 'General:'
+                    },
+                    'multi-pass': {
+                        default: userSettings['mutli-pass'] || 0,
+                        describe: 'Enable multiple passes by the encoder. Must be greater 1.',
+                        type: 'number',
+                        group: 'Video:'
+                    },
+                    'stats': {
+                        default: userSettings['stats'] || false,
+                        describe: 'Output a stats file containing stats for each video converted.',
+                        type: 'boolean',
+                        group: 'Advanced:'
+                    },
+                    'v': {
+                        alias: 'verbose',
+                        default: userSettings['verbose'] || false,
+                        describe: 'Enables verbose mode. Prints extra information.',
+                        type: 'boolean',
+                        group: 'General:'
+                    },
+                    'bitdepth': {
+                        default: userSettings['bitdepth'] || false,
+                        describe: 'Forces encoding videos at a specific bitdepth.',
+                        type: 'number',
+                        group: 'Video:'
+                    },
+                    'screenshots': {
+                        default: userSettings['screenshots'] || false,
+                        describe: 'Take 6 screenshots at regular intervals throughout the finished encode.',
+                        type: 'boolean',
+                        group: 'Video:'
+                    },
+                    'normalize-level': {
+                        default: userSettings['normalize-level'] || 2,
+                        describe: 'Normalize the output. See README for more info.',
+                        type: 'number',
+                        group: 'Advanced:'
+                    },
+                    'scale': {
+                        default: userSettings['scale'] || false,
+                        describe: 'Width videos should be scale to. Videos will always maintain original aspect ratio. [Examples: 720, 480]',
+                        type: 'number',
+                        group: 'Video:'
+                    },
+                    'debug': {
+                        default: userSettings['debug'] || false,
+                        describe: 'Enables debug mode. Prints extra debugging information.',
+                        type: 'boolean',
+                        group: 'Advanced:'
+                    },
+                    'delete': {
+                        default: userSettings['delete'] || false,
+                        describe: 'Delete source after encoding is complete and replaces it with new encode. [DANGER]',
+                        type: 'boolean',
+                        group: 'Advanced:'
+                    },
+                    'help': {
+                        describe: 'Displays help page.',
+                        group: 'Options:'
+                    },
+                    'test': {
+                        default: userSettings['test'] || false,
+                        describe: 'Puts h265ize in test mode. No files will be encoded.',
+                        type: 'boolean',
+                        group: 'Advanced:'
+                    },
+                    'version': {
+                        describe: 'Displays version information.',
+                        group: 'Options:'
+                    },
+                })
+                .argv;
 
 
         // Show help
@@ -1528,7 +1541,7 @@ function runCli() {
         }
 
         resolve(args);
-    }).then(function(args) {
+    }).then(function (args) {
         let input = args._[0];
         if (!input) {
             yargs.showHelp();
@@ -1538,7 +1551,7 @@ function runCli() {
         if (args.debug) {
             logger.transports['default-logger'].level = 'debug';
         }
-        helpers.parseInput(input, logger).then(function(paths) {
+        helpers.parseInput(input, logger).then(function (paths) {
             if (paths.length < 1) {
                 logger.error('Could not retrieve input paths.');
                 return process.exit(1);
@@ -1550,29 +1563,26 @@ function runCli() {
                 keypress(process.stdin);
                 process.stdin.setRawMode(true);
                 process.stdin.resume();
-                process.stdin.on('keypress', function(ch, key) {
+                process.stdin.on('keypress', function (ch, key) {
                     if (key && key.ctrl && key.name == 'c') {
                         readline.clearLine(process.stdout, 0);
                         readline.moveCursor(process.stdout, -1000, 0);
                         logger.warn('Caught signal interupt! Attempted to clean up.');
                         shutdown();
-                    }
-                    else if (key && key.name == 'p') {
+                    } else if (key && key.name == 'p') {
 
                         if (!encoder.paused && encoder.running) {
                             encoder.pause();
-                        }
-                        else if (encoder.paused && !encoder.running) {
+                        } else if (encoder.paused && !encoder.running) {
                             encoder.resume();
-                        }
-                        else if (!encoder.running) {
+                        } else if (!encoder.running) {
                             logger.error('Encoder could not be paused because it is not running.');
                         }
                     }
                 });
             }
 
-            process.on('SIGINT', function() {
+            process.on('SIGINT', function () {
                 logger.warn('Caught signal interupt! Attempted to clean up.');
                 shutdown();
             });
@@ -1586,21 +1596,21 @@ function runCli() {
                 process.exit(0);
             }
 
-            _.each(paths, function(path, i) {
+            _.each(paths, function (path, i) {
                 encoder.addVideo(path, _.extend(encoder.options, args));
             });
 
 
             logger.verbose('Folder encoding started at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")));
             encoder.start();
-            encoder.events.on('finished', function() {
+            encoder.events.on('finished', function () {
 
                 logger.verbose('Folder encoding finished at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")), {
                     __divider: true
                 });
 
                 if (encoder.failedVideos.length)
-                    logger.alert('The following videos', colors.yellow('(' + encoder.failedVideos.length + ')'), 'were not encoded:', _.flatMap(encoder.failedVideos, function(v) {
+                    logger.alert('The following videos', colors.yellow('(' + encoder.failedVideos.length + ')'), 'were not encoded:', _.flatMap(encoder.failedVideos, function (v) {
                         return colors.yellow(v.base) + ': ' + v.error;
                     }));
                 process.exit(0);

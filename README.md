@@ -4,6 +4,8 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 
 [![NPM License](https://img.shields.io/npm/l/h265ize.svg)](https://raw.githubusercontent.com/FallingSnow/h265ize/master/LICENSE) [![NPM Version](https://img.shields.io/npm/v/h265ize.svg)](https://www.npmjs.com/package/h265ize)
 
+[![NPM Version](https://nodei.co/npm/h265ize.png)](https://www.npmjs.com/package/h265ize)
+
 If you have any questions or h265ize isn't working for you, feel free to open an issue.
 
 > *h265ize will support [AV1](https://en.wikipedia.org/wiki/AOMedia_Video_1) once encoder support becomes stable & plex supports decoding it.*
