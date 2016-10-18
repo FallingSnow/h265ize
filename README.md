@@ -26,7 +26,6 @@ If you have any questions or h265ize isn't working for you, feel free to open an
 - Detects if file is already encoded in x265 and skips it
 - Ability to make encoding previews
 - Take screenshots of a finished encode
-- Fallback ffmpeg/ffprobe binary if ffmpeg is not installed
 - Faulty encoding detection based on before and after video durations
 - Maintains file structure in output folder (So in theory you could just take your 3tb movie folder and throw it into the script and the output folder should look that same but with x265 videos)
 
@@ -125,7 +124,7 @@ Simply run `npm install h265ize --global` again.
 
 Run `h265ize --help` for more info.
 
-#### Aspresets <a name="aspresets"></a>
+#### Aspresets
 | Preset | Description |
 |:---:|:---|
 | basic | Overall good preset, will always create high quality videos but may produce large files. |

@@ -24,9 +24,6 @@ const Pauser = require('promise-pauser');
 const hasbin = require('hasbin');
 //const stackTrace = require('stack-trace');
 //require("long-stack-traces");
-
-// const ffmpegPath = require('ffmpeg-static').path;
-// const ffprobePath = require('ffprobe-static').path;
 const ffmpeg = require('fluent-ffmpeg');
 
 const helpers = require(Path.join(__dirname, 'lib/helpers.js'));
@@ -71,6 +68,7 @@ class Video {
             quality: 19,
             override: false,
             stats: true,
+            HEAudioBitrate: 40,
             destination: os.homedir()
         });
         if (!this.options.delete) {
@@ -391,92 +389,120 @@ class Video {
                 return resolve();
             }
 
-            _self.stages[_self.currentStageNum].command = new ffmpeg(_self.path, {
-                logger: _self.encoder.logger
-            }).inputOptions('-hide_banner').format('null').output('-')
-                    .on('start', function (commandLine) {
-                        if (_self.paused)
-                            _self.pause();
-                        _self.encoder.logger.debug('Running Query:', commandLine);
-                    })
-                    .on('error', function (err, stdout, stderr) {
-                        _self.encoder.logger.debug(err.stack);
+            let availableFilters;
 
-                        _self.encoder.logger.debug(stderr);
-
-                        if (err.message.startsWith('ffmpeg was killed with signal'))
-                            reject(new Error('ENDING'));
-                        else
-                            reject(err);
-                    });
-            let vdc = _self.stages[_self.currentStageNum].command;
-
-            // Only map streams we are going to work on
-            _.each(_self.streams.audioStreams, function (stream, i) {
-                vdc.outputOptions('-map', stream.input + ':' + stream.index);
+            ffmpeg.getAvailableFilters(function (err, filters) {
+                availableFilters = filters;
+                normalize();
             });
 
+            function normalize() {
 
-            /************ This is where the normalization detection happens ***/
+                _self.stages[_self.currentStageNum].command = new ffmpeg(_self.path, {
+                    logger: _self.encoder.logger
+                }).inputOptions('-hide_banner').format('null').output('-')
+                        .on('start', function (commandLine) {
+                            if (_self.paused)
+                                _self.pause();
+                            _self.encoder.logger.debug('Running Query:', commandLine);
+                        })
+                        .on('error', function (err, stdout, stderr) {
+                            _self.encoder.logger.debug(err.stack);
 
-            //
-            if (_self.options.normalizeLevel >= 5) {
+                            _self.encoder.logger.debug(stderr);
 
-            }
+                            if (err.message.startsWith('ffmpeg was killed with signal'))
+                                reject(new Error('ENDING'));
+                            else
+                                reject(err);
+                        });
+                let vdc = _self.stages[_self.currentStageNum].command;
 
-            //
-            else if (_self.options.normalizeLevel >= 4) {
+                if (_self.options.preview) {
+                    vdc.seekInput(_self.metadata.format.duration / 2).duration(_self.options.previewLength / 1000);
+                }
 
-                _self.encoder.logger.error('Loudnorm audio normalization is currently not supported by ffmpeg stable. Please lower normalization-level to 3.');
-                return reject(new Error('Loudnorm not supported'));
-
-                // TODO: Finish
-
-                // Oh loudnorm multipass, lets begin
+                // Only map streams we are going to work on
                 _.each(_self.streams.audioStreams, function (stream, i) {
-                    vdc.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json');
+                    vdc.outputOptions('-map', stream.input + ':' + stream.index);
                 });
 
-                vdc.on('end', function (stderr) {
-                    delete _self.stages[_self.currentStageNum].command;
-                    _self.encoder.logger.debug(stderr);
-                    process.exit(0);
-                    return resolve();
-                });
 
-                vdc.run();
-            }
+                /************ This is where the normalization detection happens ***/
 
-            // "simple" audio RMS-based normalization to -2.0 dBFS
-            else if (_self.options.normalizeLevel >= 3) {
-                const volumeRegexp = /max_volume: (-?[0-9]+\.[0-9]+)/g;
-                let volumeLevels = [];
-                _.each(_self.streams.audioStreams, function (stream, i) {
-                    vdc.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']volumedetect');
-                });
-
-                vdc.on('stderr', function (stderrLine) {
-                    if (stderrLine.startsWith('[Parsed_volumedetect')) {
-                        let match = volumeRegexp.exec(stderrLine);
-                        if (match) {
-                            volumeLevels.push(parseFloat(match[1]));
-                        }
+                //
+                if (_self.options.normalizeLevel >= 5) {
+                    
+                    if (!availableFilters.dynaudnorm) {
+                        reject(new Error('Installed ffmpeg version does not support the dynaudnorm audio filter.'));
                     }
-                    _self.encoder.logger.debug(colors.bgMagenta.white('[ffmpeg]'), stderrLine);
-                }).on('end', function (stderr) {
-                    delete _self.stages[_self.currentStageNum].command;
-                    _.each(_self.streams.audioStreams, function (stream, i) {
-                        let volume = volumeLevels[i] * -1 - 2.0;
-                        _self.ffmpegCommand.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']volume=' + volume + 'dB');
-                        _self.ffmpegCommand.outputOptions('-c:' + stream.input + ':' + stream.index, 'libfdk_aac');
-                        // Hardcoded bitrate
-                        let bitrate = 128;
-                        _self.ffmpegCommand.outputOptions('-b:' + stream.input + ':' + stream.index, bitrate * stream.channels + 'k');
-                    });
-                    return resolve();
-                });
 
-                vdc.run();
+                }
+
+                //
+                else if (_self.options.normalizeLevel >= 4) {
+                    
+                    if (!availableFilters.loudnorm) {
+                        reject(new Error('Installed ffmpeg version does not support the loudnorm audio filter.'));
+                    }
+
+                    let parsedAttributes;
+
+                    // Oh loudnorm multipass, lets begin
+                    _.each(_self.streams.audioStreams, function (stream, i) {
+                        vdc.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']loudnorm=I=-16:TP=-2.0:LRA=11:print_format=json');
+                    });
+
+                    vdc.on('end', function (stdout, stderr) {
+                        delete _self.stages[_self.currentStageNum].command;
+                        let unparsedStart = stderr.lastIndexOf('[Parsed_loudnorm') + 38;
+                        let unparsed = stderr.substr(unparsedStart).replace(/\r?\n|\r/g, '');
+                        parsedAttributes = JSON.parse(unparsed);
+                        _self.ffmpegCommand.audioFilters({
+                            filter: 'loudnorm',
+                            options: 'I=-16:TP=-2.0:LRA=11:measured_I=' + parsedAttributes.input_i + ':measured_LRA=' + parsedAttributes.input_lra + ':measured_TP=' + parsedAttributes.input_tp + ':measured_thresh=' + parsedAttributes.input_thresh + ':offset=' + parsedAttributes.target_offset + ':linear=true:print_format=summary'
+                        });
+                        return resolve();
+                    });
+
+                    vdc.run();
+                }
+
+                // "simple" audio RMS-based normalization to -2.0 dBFS
+                else if (_self.options.normalizeLevel >= 3) {
+                    
+                    if (!availableFilters.volumedetect || !availableFilters.volume) {
+                        reject(new Error('Installed ffmpeg version does not support volumedetect audio filter or volume audio filter.'));
+                    }
+                    const volumeRegexp = /max_volume: (-?[0-9]+\.[0-9]+)/g;
+                    let volumeLevels = [];
+                    _.each(_self.streams.audioStreams, function (stream, i) {
+                        vdc.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']volumedetect');
+                    });
+
+                    vdc.on('stderr', function (stderrLine) {
+                        if (stderrLine.startsWith('[Parsed_volumedetect')) {
+                            let match = volumeRegexp.exec(stderrLine);
+                            if (match) {
+                                volumeLevels.push(parseFloat(match[1]));
+                            }
+                        }
+                        _self.encoder.logger.debug(colors.bgMagenta.white('[ffmpeg]'), stderrLine);
+                    }).on('end', function (stderr) {
+                        delete _self.stages[_self.currentStageNum].command;
+                        _.each(_self.streams.audioStreams, function (stream, i) {
+                            let volume = volumeLevels[i] * -1 - 2.0;
+                            _self.ffmpegCommand.outputOptions('-filter_complex', '[' + stream.input + ':' + stream.index + ']volume=' + volume + 'dB');
+                            _self.ffmpegCommand.outputOptions('-c:' + stream.input + ':' + stream.index, 'libfdk_aac');
+                            // Hardcoded bitrate
+                            let bitrate = 128;
+                            _self.ffmpegCommand.outputOptions('-b:' + stream.input + ':' + stream.index, bitrate * stream.channels + 'k');
+                        });
+                        return resolve();
+                    });
+
+                    vdc.run();
+                }
             }
 
         });
@@ -767,7 +793,8 @@ class Video {
             if (_self.options.extraOptions)
                 _self._addX265Option(_self.options.extraOptions);
 
-            _self.ffmpegCommand.outputOptions('-x265-params', _self.x265Options);
+            if (_self.x265Options)
+                _self.ffmpegCommand.outputOptions('-x265-params', _self.x265Options);
 
             _self.ffmpegCommand
                     .on('progress', function (progress) {
@@ -965,6 +992,7 @@ class Video {
             return stage.promise.call(_self).tap(Pauser.waitFor(_self.pauser));
 
         }, this.currentStageNum).then(function () {
+            _self.finishedAt = moment();
             _self.events.emit('finished', _self);
             _self.status = 'finished';
             _self.stop();
@@ -1031,9 +1059,11 @@ class Video {
         this.running = false;
         this.paused = false;
 
-        if (this.status !== 'finished' && this.status  !== 'failed') {
+        if (this.status !== 'finished' && this.status !== 'failed') {
             this.status = 'failed';
-            this.events.emit('failed', this, new Error(this.error));
+            if (!this.error)
+                this.error = new Error('Stopped prematurely.');
+            this.events.emit('failed', this);
         }
 
         this.events.emit('stopped');
@@ -1169,10 +1199,6 @@ class Encoder {
         this.status = 'waiting';
         this.usingFallbackFfmpeg = false;
 
-        this.options = {
-            HEAudioBitrate: 40
-        };
-
         this.events = new EventEmitter();
 
         // if (!hasbin.sync('ffmpeg')) {
@@ -1263,10 +1289,10 @@ class Encoder {
                     _self.finishedVideos.push(video);
                     _self.loop();
                 })
-                .on('failed', function (video, reason) {
+                .on('failed', function (video) {
                     _self.failedVideos.push(video);
-                    _self.logger.debug(reason.stack);
-                    _self.logger.error(reason.message);
+                    _self.logger.debug(video.error.stack);
+                    _self.logger.error(video.error.message);
                     _self.loop();
                 });
 
@@ -1280,7 +1306,6 @@ class Encoder {
             this.queue.push(path);
             video = path;
         } else {
-            _.defaults(options, this.options);
             video = new Video(path, options);
             video.encoder = this;
             this.queue.push(video);
@@ -1435,7 +1460,7 @@ function runCli() {
                     },
                     'downmix-he-audio': {
                         default: userSettings['downmix-he-audio'] || false,
-                        describe: 'Downmix he-audio opus to Dolby Pro Logic II at ? kbps/channel. Enables he-audio.',
+                        describe: 'Downmix he-audio opus to Dolby Pro Logic II at 40 kbps/channel. Enables he-audio.',
                         type: 'boolean',
                         group: 'Audio:'
                     },
