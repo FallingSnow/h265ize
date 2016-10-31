@@ -1,15 +1,25 @@
-"use strict";
-
 const assert = require('chai').assert;
 const h265ize = require('./h265ize');
 
-const testVideoPath = 'test/trailer.webm';
+const testVideoPath = 'test/sintel-test.mkv';
+
+const nullFunc = function() {
+    return undefined;
+}
+const nullLogger = {
+    debug: nullFunc,
+    verbose: nullFunc,
+    info: nullFunc,
+    error: nullFunc,
+    alert: nullFunc,
+    warn: nullFunc
+}
 
 let Encoder, Video;
 describe('Encoder', function() {
     this.timeout(1000);
     it('should return an instance of Encoder', function() {
-        assert.instanceOf(Encoder = new h265ize.Encoder(), h265ize.Encoder, 'new h265ize.Encoder() did not return an instance of h265ize.Encoder');
+        assert.instanceOf(Encoder = new h265ize.Encoder(nullLogger), h265ize.Encoder, 'new h265ize.Encoder() did not return an instance of h265ize.Encoder');
     });
     it('should add a video by path', function() {
         assert.includeDeepMembers(Encoder.queue, [Encoder.addVideo(testVideoPath)], 'video not added');
@@ -34,6 +44,9 @@ describe('Encoder', function() {
 describe('Video', function() {
     this.timeout(1000);
     it('should return an instance of Video', function() {
+        assert.doesNotThrow(function() {
+            return new h265ize.Video(testVideoPath);
+        }, "Error while initializing h265ize.Video");
         assert.instanceOf(Video = new h265ize.Video(testVideoPath), h265ize.Video, 'new h265ize.Encoder() is not an instance of h265ize.Encoder');
     });
     it('should add video to encoder', function() {
@@ -55,5 +68,20 @@ describe('Video', function() {
     it('should stop', function() {
         assert.ifError(Video.stop());
         assert.isFalse(Video.running, 'video is still running');
+    });
+    it('should encode a video', function() {
+        let options = {
+
+        };
+        function handler() {
+            assert.isTrue(Video.status === 'finished');
+        }
+
+        Video = new h265ize.Video(testVideoPath, options)
+            .on('finished', handler)
+            .on('failed', handler);
+    });
+    it('should replace original video', function() {
+
     });
 });

@@ -68,8 +68,6 @@ Simply run `npm install h265ize --global` again.
 
 > -f :Container format to output; Options: mkv, mp4, m4v; default: mkv.
 
-> -g :Directory where new unfinished file is stored
-
 > -l :Milliseconds to be encoded in preview mode; default: 30000
 
 > -m :x265 encoder preset; Options: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo; default: fast
@@ -86,9 +84,7 @@ Simply run `npm install h265ize --global` again.
 
 > -x :Extra x265 options. Options can be found on the [x265 options page](https://x265.readthedocs.org/en/default/cli.html)
 
-> --10bit :Forces encoding videos in 10bit format (Useful for anime)
-
-> --12bit :Forces encoding videos in 12bit format (Useful for anime)
+> --bitdepth :Forces the output bitdepth (bitdepths 8, 10, and 12 are supported)
 
 > --accurate-timestamps :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
 
@@ -133,7 +129,7 @@ Run `h265ize --help` for more info.
 
 #### Examples
 * `h265izer -v big_buck_bunny_1080p_h264.mov`
-* `h265izer -v -d /home -q 25 -g /home big_buck_bunny_folder`
+* `h265izer -v -d /home -q 25 big_buck_bunny_folder`
 
 ## Stats file
 The stats file is located at the current working directory under the name `h265ize.csv`. This must be enabled using the `--stats` flag. The file is composed of several lines. Each line is in the format
