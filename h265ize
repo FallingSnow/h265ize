@@ -17,6 +17,8 @@ const Pauser = require('promise-pauser');
 //const stackTrace = require('stack-trace');
 //require("long-stack-traces");
 const yargs = require('yargs');
+const git = require('git-rev');
+const chokidar = require('chokidar');
 
 const helpers = require(Path.join(__dirname, 'lib/helpers.js'));
 const packageSettings = require(Path.join(__dirname, 'package.json'));
@@ -71,104 +73,149 @@ function runCli() {
 
         // Show version
         if (args.version) {
-            console.log(packageSettings.name, packageSettings.version);
-            process.exit(0);
+            if (packageSettings.mode === 'production') {
+                console.log(packageSettings.name, packageSettings.version);
+                process.exit(0);
+            } else if (packageSettings.mode === 'development') {
+                git.branch(function(branch) {
+                    git.short(function(short) {
+                        console.log(packageSettings.name, branch + '#' + short);
+                        process.exit(0);
+                    })
+                })
+            }
+        } else {
+            resolve(args);
         }
-
-        resolve(args);
     }).then(function(args) {
 
         if (args.debug) {
             logger.transports['default-logger'].level = 'debug';
         }
 
-        // Check if an input was given (an argument without a preceding flag that is passed a
-        // parameter)
-        let input = args._[0];
-        if (!input) {
-            yargs.showHelp();
+        // Initiate a new Encoder
+        let encoder = new Encoder(logger);
+
+        function shutdown() {
+            encoder.stop();
+            if (typeof watcher !== 'undefined')
+                watcher.close();
             process.exit(0);
         }
 
-        // Detect if the input exists and whether it is a file or directory
-        helpers.parseInput(input, logger)
+        // Make sure this is a terminal where we can listen for input events
+        // If it is, then listen for specific keypress events
+        if (process.stdin.isTTY) {
+            keypress(process.stdin);
+            process.stdin.setRawMode(true);
+            process.stdin.resume();
+            process.stdin.on('keypress', function(ch, key) {
+                if (key && key.ctrl && key.name == 'c') {
+                    readline.clearLine(process.stdout, 0);
+                    readline.moveCursor(process.stdout, -1000, 0);
+                    logger.warn('Caught signal interupt! Attempted to clean up.');
+                    shutdown();
+                } else if (key && key.name == 'p') {
 
-        .then(function(paths) {
-
-            // Check if any video paths were returned
-            if (paths.length < 1) {
-                logger.error('Could not retrieve input paths.');
-                return process.exit(1);
-            }
-
-            // Initiate a new Encoder
-            let encoder = new Encoder(logger);
-
-            // Make sure this is a terminal where we can listen for input events
-            // If it is, then listen for specific keypress events
-            if (process.stdin.isTTY) {
-                keypress(process.stdin);
-                process.stdin.setRawMode(true);
-                process.stdin.resume();
-                process.stdin.on('keypress', function(ch, key) {
-                    if (key && key.ctrl && key.name == 'c') {
-                        readline.clearLine(process.stdout, 0);
-                        readline.moveCursor(process.stdout, -1000, 0);
-                        logger.warn('Caught signal interupt! Attempted to clean up.');
-                        shutdown();
-                    } else if (key && key.name == 'p') {
-
-                        if (!encoder.paused && encoder.running) {
-                            encoder.pause();
-                        } else if (encoder.paused && !encoder.running) {
-                            encoder.resume();
-                        } else if (!encoder.running) {
-                            logger.error('Encoder could not be paused because it is not running.');
-                        }
+                    if (!encoder.paused && encoder.running) {
+                        encoder.pause();
+                    } else if (encoder.paused && !encoder.running) {
+                        encoder.resume();
+                    } else if (!encoder.running) {
+                        logger.error('Encoder could not be paused because it is not running.');
                     }
+                }
+            });
+        }
+
+        // Watch for kill signals
+        process.on('SIGINT', function() {
+            logger.warn('Caught signal interupt! Attempted to clean up.');
+            shutdown();
+        });
+        process.on('uncaughtException', (err) => {
+            logger.error(err);
+            shutdown();
+        });
+
+        // Check if an input was given (an argument without a preceding flag that is passed a
+        // parameter)
+        let input = args._[0];
+        if (args.watch) {
+            watchDirectory(args.watch);
+        } else if (!input) {
+            yargs.showHelp();
+            process.exit(0);
+        } else {
+            processInput(input);
+        }
+
+        function watchDirectory(path) {
+            logger.info('Switching to watch mode...');
+
+            watcher = chokidar.watch(args.watch, {
+                ignored: /[\/\\]\./,
+                persistent: true,
+                awaitWriteFinish: {
+                    stabilityThreshold: 3000,
+                    pollInterval: 1000
+                },
+                ignoreInitial: true
+            });
+            watcher.on('add', (path) => {
+                helpers.parseInput(path, logger).then(function(paths) {
+                    // Take each video path that we were given and add it to our Encoder
+                    _.each(paths, function(path, i) {
+                        encoder.addVideo(path, args);
+                    });
                 });
-            }
-
-            // Watch for kill signals
-            process.on('SIGINT', function() {
-                logger.warn('Caught signal interupt! Attempted to clean up.');
-                shutdown();
-            });
-            process.on('uncaughtException', (err) => {
-                logger.error(err);
-                shutdown();
             });
 
-            function shutdown() {
-                encoder.stop();
-                process.exit(0);
-            }
-
-            // Take each video path that we were given and add it to our new Encoder
-            _.each(paths, function(path, i) {
-                encoder.addVideo(path, args);
-            });
-
-            // Tell the user when the encoder has started
-            logger.verbose('Encoding started at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")));
+            logger.info('Watching', args.watch + '...');
 
             // Start the encoder
             encoder.start();
+        }
 
-            // Output some information when the Encoder finishes encoding its queue
-            encoder.events.on('finished', function() {
+        function processInput(path) {
+            // Detect if the input exists and whether it is a file or directory
+            helpers.parseInput(input, logger)
 
-                logger.verbose('Folder encoding finished at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")), {
-                    __divider: true
+            .then(function(paths) {
+
+                // Check if any video paths were returned
+                if (paths.length < 1) {
+                    logger.error('Could not retrieve input paths.');
+                    return process.exit(1);
+                }
+
+                // Take each video path that we were given and add it to our new Encoder
+                _.each(paths, function(path, i) {
+                    encoder.addVideo(path, args);
                 });
 
-                if (encoder.failedVideos.length)
-                    logger.alert('The following videos', colors.yellow('(' + encoder.failedVideos.length + ')'), 'were not encoded:', _.flatMap(encoder.failedVideos, function(v) {
-                        return colors.yellow(v.base) + ': ' + v.error;
-                    }));
-                process.exit(0);
+                // Tell the user when the encoder has started
+                logger.verbose('Encoding started at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")));
+
+                // Start the encoder
+                encoder.start();
+
+                // Output some information when the Encoder finishes encoding its queue
+                encoder.events.on('finished', function() {
+
+                    logger.verbose('Folder encoding finished at', colors.yellow(moment().format("dddd, MMMM Do YYYY, h:mm:ss A")), {
+                        __divider: true
+                    });
+
+                    if (encoder.failedVideos.length)
+                        logger.alert('The following videos', colors.yellow('(' + encoder.failedVideos.length + ')'), 'were not encoded:', _.flatMap(encoder.failedVideos, function(v) {
+                            return colors.yellow(v.base) + ': ' + v.error;
+                        }));
+
+                    shutdown();
+                });
             });
-        });
+        }
     });
 
 }

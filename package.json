@@ -1,6 +1,7 @@
 {
   "name": "h265ize",
   "version": "0.5.0",
+  "mode": "development",
   "description": "h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.",
   "main": "h265ize",
   "scripts": {
@@ -29,10 +30,12 @@
   "homepage": "https://github.com/FallingSnow/h265ize#readme",
   "dependencies": {
     "bluebird": "^3.4.1",
+    "chokidar": "^1.6.1",
     "colors": "^1.1.2",
     "filesize": "^3.3.0",
     "fluent-ffmpeg": "^2.1.0",
     "fs-extra": "^0.30.0",
+    "git-rev": "^0.2.1",
     "hasbin": "^1.2.3",
     "keypress": "^0.2.1",
     "lodash": "^4.12.0",
