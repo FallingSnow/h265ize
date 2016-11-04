@@ -64,7 +64,7 @@ Simply run `npm install h265ize --global` again.
 `./h265ize [--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
 
 ### Options
-> -d :Folder to output files to
+> -d :Destination folder
 
 > -f :Container format to output; Options: mkv, mp4, m4v; default: mkv.
 
@@ -102,13 +102,13 @@ Simply run `npm install h265ize --global` again.
 
 > --he-downmix :If there are more than 2.1 audio channels, downmix them to stereo. **`he-audio` must also be enabled**
 
-> --no-auto-audio-titles :Disable automated title generation for audio streams that do not have preexisting titles.
-
-> --no-auto-subtitle-titles :Disable automated title generation for subtitle streams that do not have preexisting titles.
+> --normalize-level :Define a level of normalization to be applied. See [Issue 56](https://github.com/FallingSnow/h265ize/issues/56) for more info.
 
 > --screenshots :Take 6 screenshots at regular intervals throughout the finished encode
 
-> --stats: Creates a stats file in the destination named h265ize.csv
+> --stats: Creates a stats file in the current working directory named h265ize.csv
+
+> --watch: Watches a folder for new files and process the videos
 
 > --video-bitrate :Sets the video bitrate, set to 0 to use qp instead of a target bitrate
 
@@ -123,22 +123,23 @@ Run `h265ize --help` for more info.
 #### Aspresets
 | Preset | Description |
 |:---:|:---|
-| basic | Overall good preset, will always create high quality videos but may produce large files. |
 | anime | A very good preset for all types of anime. Produces very good quality for a very small size. Warning: this preset creates a nonconformant, high latency encode. |
 | testing-ssim | x265's native preset just in SSIM mode. |
 
 #### Examples
 * `h265izer -v big_buck_bunny_1080p_h264.mov`
 * `h265izer -v -d /home -q 25 big_buck_bunny_folder`
+* `h265izer -d /home -q 25 --watch videos/folder`
 
 ## Stats file
 The stats file is located at the current working directory under the name `h265ize.csv`. This must be enabled using the `--stats` flag. The file is composed of several lines. Each line is in the format
 
-`[Finish Encoding Date],[Filename],[Original Size],[Encoded size],[Compression Precent],[Encoding Duration]`
+`[Finish Encoding Date],[File Path],[Original Size],[Encoded size],[Compression Precent],[Encoding Duration]`
 
 For exmaple:
 
-`08/13 02:46:03 PM, [deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.00%`
+`08/13 02:46:03 PM, videos/[deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.66%, 2:51:16`
 
 ## Creating 10bit encodes
-To create 10bit or 12bit encodes, simply pass the `--10bit` or `--12bit` parameters respecively. You may need to install `x265_main10` and `x265_main12` (x265 main10 and main12 libraries) in order to encode in 10/12 bit.
+To create 10 or 12bit encodes, simply pass the `--bitdepth 10` or `--bitdepth 12`
+parameters. Make sure you have the correct libraries or ffmpeg static build.
