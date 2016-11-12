@@ -22,6 +22,7 @@ const chokidar = require('chokidar');
 
 const helpers = require(Path.join(__dirname, 'lib/helpers.js'));
 const packageSettings = require(Path.join(__dirname, 'package.json'));
+const h265izeLogger = require('./lib/logger.js');
 
 /* INIT */
 
@@ -54,14 +55,21 @@ let h265ize = {
 /* ------------------------ Command Line Interface -------------------------- */
 
 function runCli() {
-    // Initialize a new logger. This can be replaced by the console logger,
-    // for example:
-    // const consoleLogger = require('./lib/consoleLogger.js');
-    // let logger = require('./lib/consoleLogger.js');
-    let logger = require('./lib/logger.js')('info');
+    let logger;
 
     new Promise(function(resolve, reject) {
         let args = helpers.getCLIArguments();
+
+        // Initialize a new logger. This can be replaced by the console logger,
+        // for example:
+        // const consoleLogger = require('./lib/consoleLogger.js');
+        // let logger = require('./lib/consoleLogger.js');
+        if (args.debug)
+            logger = h265izeLogger('debug');
+        else if (args.verbose)
+            logger = h265izeLogger('verbose');
+        else
+            logger = h265izeLogger('info');
 
         // Show help
         if (args.help) {
@@ -81,17 +89,13 @@ function runCli() {
                     git.short(function(short) {
                         console.log(packageSettings.name, branch + '#' + short);
                         process.exit(0);
-                    })
-                })
+                    });
+                });
             }
         } else {
             resolve(args);
         }
     }).then(function(args) {
-
-        if (args.debug) {
-            logger.transports['default-logger'].level = 'debug';
-        }
 
         // Initiate a new Encoder
         let encoder = new Encoder(logger);
@@ -100,7 +104,15 @@ function runCli() {
             encoder.stop();
             if (typeof watcher !== 'undefined')
                 watcher.close();
-            process.exit(0);
+
+            logger.info('Process ended.');
+            if (logger.transports.file) {
+                // File logger needs time to flush to disk
+                setTimeout(function() {
+                    process.exit(0);
+                }, 2000)
+            } else
+                process.exit(0);
         }
 
         // Make sure this is a terminal where we can listen for input events
