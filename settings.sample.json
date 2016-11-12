@@ -1,4 +1,5 @@
 {
+    "HOW TO USE": "Copy this file to settings.json and modify the settings below.",
     "destination": "/tmp",
     "preset": "veryfast",
     "as-preset": "none",
