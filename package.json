@@ -36,6 +36,7 @@
     "fluent-ffmpeg": "^2.1.0",
     "fs-extra": "^0.30.0",
     "git-rev": "^0.2.1",
+    "gpu-info": "0.0.1",
     "hasbin": "^1.2.3",
     "keypress": "^0.2.1",
     "lodash": "^4.12.0",
