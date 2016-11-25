@@ -175,6 +175,9 @@ function runCli() {
                 ignoreInitial: true
             });
             watcher.on('add', (path) => {
+                if (pathHasBeenProccessed(path)) {
+                    return logger.debug(path, 'was added to watch folder but has already been processed. Ignoring...');
+                }
                 helpers.parseInput(path, logger).then(function(paths) {
                     // Take each video path that we were given and add it to our Encoder
                     _.each(paths, function(path, i) {
@@ -187,6 +190,14 @@ function runCli() {
 
             // Start the encoder
             encoder.start();
+        }
+
+        function pathHasBeenProccessed(path) {
+            for (let processed of encoder.watchIgnore) {
+                if (path === processed)
+                    return true;
+            }
+            return false;
         }
 
         function processInput(path) {
