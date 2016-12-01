@@ -45,7 +45,7 @@ To install h265ize run one of the following command lines to download and instal
 npm install h265ize --global
 ```
 
-##### Arch Linux (Plus Dependencies)
+##### Arch Linux (Plus Optional Dependencies)
 ```
 sudo pacman -S nodejs mkvtoolnix-cli; \
 yaourt vobsub2srt-git; \
