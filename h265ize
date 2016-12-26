@@ -39,6 +39,8 @@ Promise.config({
     monitoring: false
 });
 
+process.H265IZE_STOP_REQUEST_COUNT = 0;
+
 /* --------------------------------- CLASSES -------------------------------- */
 
 const Video = require('./lib/classes/video.js');
@@ -70,6 +72,8 @@ function runCli() {
             logger = h265izeLogger('verbose');
         else
             logger = h265izeLogger('info');
+
+        logger.debug('Command Line: ' + process.argv.join(' '));
 
         // Show help
         if (args.help) {
@@ -105,14 +109,22 @@ function runCli() {
             if (typeof watcher !== 'undefined')
                 watcher.close();
 
-            logger.info('Process ended.');
+            if (process.H265IZE_STOP_REQUEST_COUNT > 1) {
+                logger.error('Shutdown signal more than once. Shutting down immediately...')
+                return process.exit(1);
+            }
+
             if (logger.transports.file) {
                 // File logger needs time to flush to disk
+                logger.info('Flushing log to disk...');
                 setTimeout(function() {
+                    logger.info('Process ended.');
                     process.exit(0);
-                }, 2000)
-            } else
+                }, 2000);
+            } else {
+                logger.info('Process ended.');
                 process.exit(0);
+            }
         }
 
         // Make sure this is a terminal where we can listen for input events
@@ -126,6 +138,7 @@ function runCli() {
                     readline.clearLine(process.stdout, 0);
                     readline.moveCursor(process.stdout, -1000, 0);
                     logger.warn('Caught signal interupt! Attempted to clean up.');
+                    process.H265IZE_STOP_REQUEST_COUNT++;
                     shutdown();
                 } else if (key && key.name == 'p') {
 
