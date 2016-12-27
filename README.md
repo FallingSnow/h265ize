@@ -53,12 +53,23 @@ npm install h265ize --global
 ```
 
 ##### Bleeding Edge/Development
+###### Linux
 ```
 git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm install && chmod +x h265ize
+./h265ize --version
+```
+
+##### Windows
+```
+git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm install
+node h265ize --version
 ```
 
 ### Updating
 Simply run `npm install h265ize --global` again.
+
+### Uninstalling
+`npm uninstall h265ize --global`
 
 ## Usage
 `./h265ize [--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
@@ -140,6 +151,6 @@ For exmaple:
 
 `08/13 02:46:03 PM, videos/[deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.66%, 2:51:16`
 
-## Creating 10bit encodes
+## Creating 10bit & 12bit encodes
 To create 10 or 12bit encodes, simply pass the `--bitdepth 10` or `--bitdepth 12`
 parameters. Make sure you have the correct libraries or ffmpeg static build.
