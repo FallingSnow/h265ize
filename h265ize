@@ -177,6 +177,7 @@ function runCli() {
 
         function watchDirectory(path) {
             logger.info('Switching to watch mode...');
+            encoder.root = path;
 
             watcher = chokidar.watch(args.watch, {
                 ignored: /[\/\\]\./,
@@ -194,7 +195,7 @@ function runCli() {
                 helpers.parseInput(path, logger).then(function(paths) {
                     // Take each video path that we were given and add it to our Encoder
                     _.each(paths, function(path, i) {
-                        encoder.addVideo(path, args);
+                        encoder.addVideo(path, Object.assign({}, args, {destination: Path.resolve(args.destination, Path.dirname(Path.relative(encoder.root, path)))}));
                     });
                 });
             });
@@ -214,6 +215,8 @@ function runCli() {
         }
 
         function processInput(path) {
+            encoder.root = path;
+
             // Detect if the input exists and whether it is a file or directory
             helpers.parseInput(input, logger)
 
@@ -227,7 +230,7 @@ function runCli() {
 
                 // Take each video path that we were given and add it to our new Encoder
                 _.each(paths, function(path, i) {
-                    encoder.addVideo(path, args);
+                    encoder.addVideo(path, Object.assign({}, args, {destination: Path.resolve(args.destination, Path.dirname(Path.relative(encoder.root, path)))}));
                 });
 
                 // Tell the user when the encoder has started
