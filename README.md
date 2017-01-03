@@ -147,7 +147,7 @@ The stats file is located at the current working directory under the name `h265i
 
 `[Finish Encoding Date],[File Path],[Original Size],[Encoded size],[Compression Precent],[Encoding Duration]`
 
-For exmaple:
+For example:
 
 `08/13 02:46:03 PM, videos/[deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.66%, 2:51:16`
 
