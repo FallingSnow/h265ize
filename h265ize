@@ -17,7 +17,7 @@ const Pauser = require('promise-pauser');
 //const stackTrace = require('stack-trace');
 //require("long-stack-traces");
 const yargs = require('yargs');
-const git = require('git-rev');
+const git = require('local-git-sync');
 const chokidar = require('chokidar');
 
 const helpers = require(Path.join(__dirname, 'lib/helpers.js'));
@@ -89,12 +89,10 @@ function runCli() {
                 console.log(packageSettings.name, packageSettings.version);
                 process.exit(0);
             } else if (packageSettings.mode === 'development') {
-                git.branch(function(branch) {
-                    git.short(function(short) {
-                        console.log(packageSettings.name, branch + '#' + short);
-                        process.exit(0);
-                    });
-                });
+                let branch = git.branch(__dirname);
+                let short = git.short(__dirname);
+                console.log(packageSettings.name, branch + '#' + short);
+                process.exit(0);
             }
         } else {
             resolve(args);
@@ -195,7 +193,9 @@ function runCli() {
                 helpers.parseInput(path, logger).then(function(paths) {
                     // Take each video path that we were given and add it to our Encoder
                     _.each(paths, function(path, i) {
-                        encoder.addVideo(path, Object.assign({}, args, {destination: Path.resolve(args.destination, Path.dirname(Path.relative(encoder.root, path)))}));
+                        encoder.addVideo(path, Object.assign({}, args, {
+                            destination: Path.resolve(args.destination, Path.dirname(Path.relative(encoder.root, path)))
+                        }));
                     });
                 });
             });
@@ -230,7 +230,9 @@ function runCli() {
 
                 // Take each video path that we were given and add it to our new Encoder
                 _.each(paths, function(path, i) {
-                    encoder.addVideo(path, Object.assign({}, args, {destination: Path.resolve(args.destination, Path.dirname(Path.relative(encoder.root, path)))}));
+                    encoder.addVideo(path, Object.assign({}, args, {
+                        destination: Path.resolve(args.destination, Path.dirname(Path.relative(encoder.root, path)))
+                    }));
                 });
 
                 // Tell the user when the encoder has started
