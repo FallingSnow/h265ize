@@ -72,7 +72,7 @@ Simply run `npm install h265ize --global` again.
 `npm uninstall h265ize --global`
 
 ## Usage
-`./h265ize [--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--10bit] [--12bit] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--he-downmix] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
+`./h265ize [--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--bitdepth <integer>] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--downmix-he-audio] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
 
 ### Options
 > -d :Destination folder
@@ -111,7 +111,7 @@ Simply run `npm install h265ize --global` again.
 
 > --he-audio :High Efficiency audio mode
 
-> --he-downmix :If there are more than 2.1 audio channels, downmix them to stereo. **`he-audio` must also be enabled**
+> --downmix-he-audio :If there are more than 2.1 audio channels, downmix them to stereo.
 
 > --normalize-level :Define a level of normalization to be applied. See [Issue 56](https://github.com/FallingSnow/h265ize/issues/56) for more info.
 
