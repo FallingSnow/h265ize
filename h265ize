@@ -94,7 +94,7 @@ function runCli() {
                 if (packageSettings.gitHead && packageSettings._requested) {
                     let url = packageSettings._requested.hosted.directUrl;
                     branch = packageSettings._requested.hosted.directUrl.substring(url.lastIndexOf('/', url.length - 14), url.length - 13).substr(1, url.length);
-                    short = packageSettings.gitHead;
+                    short = packageSettings.gitHead.substr(0, 7);
                 } else {
                     try {
                         branch = git.branch(__dirname);
