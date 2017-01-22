@@ -1,0 +1,22 @@
+{
+    "anime-high": {
+        "x265Options": "weightb",
+        "preset": "medium",
+        "bitdepth": 10
+    },
+    "anime-medium": {
+        "x265Options": "weightb",
+        "preset": "medium",
+        "bitdepth": 10,
+        "videoFilters": "deband=r=32:1thr=0.01:2thr=0.01:3thr=0.01:4thr=0.01"
+    },
+    "anime": {
+        "x265Options": "weightb",
+        "preset": "medium",
+        "bitdepth": 10,
+        "videoFilters": "deband=r=32:1thr=0.01:2thr=0.01:3thr=0.01:4thr=0.01"
+    },
+    "testing-ssim": {
+        "x265Options": "tune=ssim:ssim:psy-rd=0"
+    }
+}

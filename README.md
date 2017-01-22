@@ -1,6 +1,6 @@
 # h265ize
-h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec.
-For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265ize/ "Ayrton Sparling").
+
+h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec. For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265ize/ "Ayrton Sparling").
 
 [![NPM License](https://img.shields.io/npm/l/h265ize.svg)](https://raw.githubusercontent.com/FallingSnow/h265ize/master/LICENSE) [![NPM Version](https://img.shields.io/npm/v/h265ize.svg)](https://www.npmjs.com/package/h265ize)
 
@@ -8,9 +8,10 @@ For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index
 
 If you have any questions or h265ize isn't working for you, feel free to open an issue.
 
-> *h265ize will support [AV1](https://en.wikipedia.org/wiki/AOMedia_Video_1) once encoder support becomes stable & plex supports decoding it.*
+> _h265ize will support [AV1](https://en.wikipedia.org/wiki/AOMedia_Video_1) once encoder support becomes stable & plex supports decoding it._
 
 ## Features
+
 - Works on Windows, OSX, and Linux
 - Batch file processing (can process a whole folder)
 - Automatically detects video files (only processes video files found within a folder)
@@ -30,51 +31,46 @@ If you have any questions or h265ize isn't working for you, feel free to open an
 - Maintains file structure in output folder (So in theory you could just take your 3tb movie folder and throw it into the script and the output folder should look that same but with x265 videos)
 
 ### Dependencies
+
 - [Node.js](https://nodejs.org/en/) - Required in order to run h265ize.
 - [ffmpeg](https://ffmpeg.org/) - Does the video conversion among other things.
 
 #### Option Dependencies
+
 - [mkvtoolnix](https://www.bunkus.org/videotools/mkvtoolnix/) - Used for upconverting subs in MKVs.
 - [vobsub2srt](https://github.com/ruediger/VobSub2SRT) - Used for upconverting subs.
 
 ### Installation
+
 To install h265ize run one of the following command lines to download and install.
 
-##### Base Utility
+#### Stable
+
 ```
 npm install h265ize --global
 ```
 
-##### Arch Linux (Plus Optional Dependencies)
-```
-sudo pacman -S nodejs mkvtoolnix-cli; \
-yaourt vobsub2srt-git; \
-npm install h265ize --global
-```
+#### Bleeding Edge
 
-##### Bleeding Edge/Development
-###### Linux
 ```
-git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm install && chmod +x h265ize
-./h265ize --version
-```
-
-##### Windows
-```
-git clone https://github.com/FallingSnow/h265ize.git && cd h265ize && npm install
-node h265ize --version
+npm install FallingSnow/h265ize --global
+h265ize --version
 ```
 
 ### Updating
+
 Simply run `npm install h265ize --global` again.
 
 ### Uninstalling
+
 `npm uninstall h265ize --global`
 
 ## Usage
-`./h265ize [--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--bitdepth <integer>] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--no-auto-subtitle-titles] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--downmix-he-audio] [--no-auto-audio-titles] [--screenshots] [--delete] <file|directory>`
+
+`./h265ize [--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--bitdepth (8|10|12)] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--downmix-he-audio] [--screenshots] [--delete] <file|directory>`
 
 ### Options
+
 > -d :Destination folder
 
 > -f :Container format to output; Options: mkv, mp4, m4v; default: mkv.
@@ -132,17 +128,21 @@ Simply run `npm install h265ize --global` again.
 Run `h265ize --help` for more info.
 
 #### Aspresets
-| Preset | Description |
-|:---:|:---|
-| anime | A very good preset for all types of anime. Produces very good quality for a very small size. Warning: this preset creates a nonconformant, high latency encode. |
-| testing-ssim | x265's native preset just in SSIM mode. |
+
+   Preset    | Description
+:----------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------
+   anime-high     | A very good preset for all types of anime. Produces very good quality for a very small size.
+   anime-medium     | Same as anime-high but uses debanding to produce better color gradients.
+testing-ssim | x265's native preset just in SSIM mode.
 
 #### Examples
-* `h265izer -v big_buck_bunny_1080p_h264.mov`
-* `h265izer -v -d /home -q 25 big_buck_bunny_folder`
-* `h265izer -d /home -q 25 --watch videos/folder`
+
+- `h265izer -v big_buck_bunny_1080p_h264.mov`
+- `h265izer -v -d /home -q 25 big_buck_bunny_folder`
+- `h265izer -d /home -q 25 --watch videos/folder`
 
 ## Stats file
+
 The stats file is located at the current working directory under the name `h265ize.csv`. This must be enabled using the `--stats` flag. The file is composed of several lines. Each line is in the format
 
 `[Finish Encoding Date],[File Path],[Original Size],[Encoded size],[Compression Precent],[Encoding Duration]`
@@ -152,5 +152,5 @@ For example:
 `08/13 02:46:03 PM, videos/[deanzel] Noir - 08 [BD 1080p Hi10p Dual Audio FLAC][a436a4e8].mkv, 1964MB, 504MB, 25.66%, 2:51:16`
 
 ## Creating 10bit & 12bit encodes
-To create 10 or 12bit encodes, simply pass the `--bitdepth 10` or `--bitdepth 12`
-parameters. Make sure you have the correct libraries or ffmpeg static build.
+
+To create 10 or 12bit encodes, simply pass the `--bitdepth 10` or `--bitdepth 12` parameters. Make sure you have the correct libraries or ffmpeg static build.

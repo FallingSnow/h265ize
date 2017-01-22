@@ -89,8 +89,21 @@ function runCli() {
                 console.log(packageSettings.name, packageSettings.version);
                 process.exit(0);
             } else if (packageSettings.mode === 'development') {
-                let branch = git.branch(__dirname);
-                let short = git.short(__dirname);
+                let branch = 'unknown';
+                let short = "unknown";
+                if (packageSettings.gitHead && packageSettings._requested) {
+                    let url = packageSettings._requested.hosted.directUrl;
+                    branch = packageSettings._requested.hosted.directUrl.substring(url.lastIndexOf('/', url.length - 14), url.length - 13).substr(1, url.length);
+                    short = packageSettings.gitHead;
+                } else {
+                    try {
+                        branch = git.branch(__dirname);
+                        short = git.short(__dirname);
+                    } catch (e) {
+                        console.log('Unabled to retrieve version:', e);
+                        process.exit(1);
+                    }
+                }
                 console.log(packageSettings.name, branch + '#' + short);
                 process.exit(0);
             }
