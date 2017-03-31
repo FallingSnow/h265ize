@@ -99,7 +99,7 @@ Simply run `npm install h265ize --global` again.
 
 > --debug :Debug mode; Print extra debugging information
 
-> --delete :Deletes source after encoding is complete and replaces it with new encode; STRONGLY NOT RECOMMENED
+> --delete :Deletes source after encoding is complete and replaces it with new encode; STRONGLY NOT RECOMMENDED
 
 > --disable-upconvert :Disable Upconvert; Stop converting Vobsub subs to srt; Only works with mkv's
 
