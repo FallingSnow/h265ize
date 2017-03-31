@@ -137,9 +137,9 @@ testing-ssim | x265's native preset just in SSIM mode.
 
 #### Examples
 
-- `h265izer -v big_buck_bunny_1080p_h264.mov`
-- `h265izer -v -d /home -q 25 big_buck_bunny_folder`
-- `h265izer -d /home -q 25 --watch videos/folder`
+- `h265ize -v big_buck_bunny_1080p_h264.mov`
+- `h265ize -v -d /home -q 25 big_buck_bunny_folder`
+- `h265ize -d /home -q 25 --watch videos/folder`
 
 ## Stats file
 
