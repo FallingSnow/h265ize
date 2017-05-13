@@ -30,38 +30,38 @@ If you have any questions or h265ize isn't working for you, feel free to open an
 - Faulty encoding detection based on before and after video durations
 - Maintains file structure in output folder (So in theory you could just take your 3tb movie folder and throw it into the script and the output folder should look that same but with x265 videos)
 
-### Dependencies
+## Dependencies
 
 - [Node.js](https://nodejs.org/en/) - Required in order to run h265ize.
 - [ffmpeg](https://ffmpeg.org/) - Does the video conversion among other things.
 
-#### Option Dependencies
+### Option Dependencies
 
 - [mkvtoolnix](https://www.bunkus.org/videotools/mkvtoolnix/) - Used for upconverting subs in MKVs.
 - [vobsub2srt](https://github.com/ruediger/VobSub2SRT) - Used for upconverting subs.
 
-### Installation
+## Installation
 
 To install h265ize run one of the following command lines to download and install.
 
-#### Stable
+### Stable
 
 ```
 npm install h265ize --global
 ```
 
-#### Bleeding Edge
+### Bleeding Edge
 
 ```
 npm install FallingSnow/h265ize --global
 h265ize --version
 ```
 
-### Updating
+## Updating
 
 Simply run `npm install h265ize --global` again.
 
-### Uninstalling
+## Uninstalling
 
 `npm uninstall h265ize --global`
 
@@ -127,7 +127,7 @@ Simply run `npm install h265ize --global` again.
 
 Run `h265ize --help` for more info.
 
-#### Aspresets
+### Aspresets
 
    Preset    | Description
 :----------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -135,7 +135,7 @@ Run `h265ize --help` for more info.
    anime-medium     | Same as anime-high but uses debanding to produce better color gradients.
 testing-ssim | x265's native preset just in SSIM mode.
 
-#### Examples
+### Examples
 
 - `h265ize -v big_buck_bunny_1080p_h264.mov`
 - `h265ize -v -d /home -q 25 big_buck_bunny_folder`
