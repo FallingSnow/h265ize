@@ -67,7 +67,7 @@ Simply run `npm install h265ize --global` again.
 
 ## Usage
 
-`./h265ize [--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--bitdepth (8|10|12)] [--accurate-timestamps] [--as-preset <preset>] [--disable-upconvert] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--downmix-he-audio] [--screenshots] [--delete] <file|directory>`
+`./h265ize [--help] [-d <string>] [-q <0-51>] [-m <string>] [-n <string>] [-f <string>{3}] [-g <string>] [-l <integer>] [-o] [-p] [-v] [--bitdepth (8|10|12)] [--accurate-timestamps] [--max-muxing-queue-size <queue-size>] [--as-preset <preset>] [--disable-upconvert] [--debug] [--video-bitrate <integer>] [--he-audio] [--force-he-audio] [--downmix-he-audio] [--screenshots] [--delete] <file|directory>`
 
 ### Options
 
@@ -94,6 +94,8 @@ Simply run `npm install h265ize --global` again.
 > --bitdepth :Forces the output bitdepth (bitdepths 8, 10, and 12 are supported)
 
 > --accurate-timestamps :Accurate Timestamps (substantially increases file size but sometimes fixes timestamps)
+
+> --max-muxing-queue-size :Set -max_muxing_queue_size for ffmpeg. [ffmpeg advanced options page](https://ffmpeg.org/ffmpeg.html#Advanced-options)
 
 > --as-preset :My personal presets; Possible values are listed below; I'll be adding more as time goes on
 

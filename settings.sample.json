@@ -10,6 +10,7 @@
     "video-bitrate": 0,
     "preview-length": 30000,
     "accurate-timestamps": false,
+    "max-muxing-queue-size": 0,
     "he-audio": true,
     "force-he-audio": true,
     "downmix-he-audio": true,
