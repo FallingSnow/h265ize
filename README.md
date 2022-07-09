@@ -89,7 +89,7 @@ Simply run `npm install h265ize --global` again.
 
 > -v :Verbose mode; Display extra output
 
-> -x :Extra x265 options. Options can be found on the [x265 options page](https://x265.readthedocs.org/en/default/cli.html)
+> -x :Extra x265 options. Options can be found on the [x265 options page](https://x265.readthedocs.io/en/stable/cli.html)
 
 > --bitdepth :Forces the output bitdepth (bitdepths 8, 10, and 12 are supported)
 
