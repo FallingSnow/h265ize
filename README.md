@@ -1,3 +1,6 @@
+### Unmaintained
+h265ize hasn't been maintained for a long time and there are no plans to maintain/update it in the future.
+
 # h265ize
 
 h265ize is a fire and forget weapon. A nodejs utility utilizing ffmpeg to encode large quantities of videos with the hevc codec. For more information visit [ayrton.sparling.us](https://ayrton.sparling.us/index.php/ultimate-x265hevc-encoding-script-h265ize/ "Ayrton Sparling").
