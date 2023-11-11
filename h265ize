@@ -3,14 +3,12 @@
 /* global __dirname */
 
 const Path = require('path');
-const os = require("os");
 const readline = require("readline");
 
 const _ = require("lodash");
 const colors = require('colors');
 const moment = require('moment');
 require("moment-duration-format");
-const fs = require('fs-extra');
 const keypress = require('keypress');
 const Promise = require("bluebird");
 const Pauser = require('promise-pauser');
@@ -152,7 +150,6 @@ function runCli() {
                     process.H265IZE_STOP_REQUEST_COUNT++;
                     shutdown();
                 } else if (key && key.name == 'p') {
-
                     if (!encoder.paused && encoder.running) {
                         encoder.pause();
                     } else if (encoder.paused && !encoder.running) {
